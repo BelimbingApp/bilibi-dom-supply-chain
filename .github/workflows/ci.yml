@@ -1,0 +1,101 @@
+# Reference CI for a Bilibi Domain or Extension repository. Copy it to
+# .github/workflows/ci.yml, set CONTAINER_ROLE and CONTAINER_ID, and keep the
+# Platform revision in .github/bilibi-revision (one commit SHA of
+# BelimbingApp/bilibi). The repository is not buildable alone: it mounts at
+# apps/<role>/<container> in a Platform checkout, and scripts/domain-ci.sh
+# runs the Platform's own gates over the composed workspace.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  CONTAINER_ROLE: domains # domains, or extensions for an Extension
+  CONTAINER_ID: supply_chain # snake_case; the folder name and bilibi.container.toml id
+
+jobs:
+  mounted:
+    name: Mounted in Bilibi
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      DATABASE_URL: postgres://bilibi:bilibi@localhost:5432/bilibi
+
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: bilibi
+          POSTGRES_PASSWORD: bilibi
+          POSTGRES_USER: bilibi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bilibi"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: bilibi
+
+    steps:
+      - name: Check out this repository
+        uses: actions/checkout@v7
+        with:
+          path: container
+
+      - name: Read the pinned Platform revision
+        id: pin
+        working-directory: .
+        run: echo "revision=$(tr -d '[:space:]' < container/.github/bilibi-revision)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out Bilibi
+        uses: actions/checkout@v7
+        with:
+          repository: BelimbingApp/bilibi
+          ref: ${{ steps.pin.outputs.revision }}
+          path: bilibi
+
+      # The mount folder is the container ID. Moving the checkout keeps its
+      # .git, so the container stays an independent nested repository that the
+      # Platform's .gitignore ignores.
+      - name: Mount the container
+        working-directory: .
+        run: mv container "bilibi/apps/$CONTAINER_ROLE/$CONTAINER_ID"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2.9.2
+        with:
+          workspaces: bilibi
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: bilibi/apps/base/ui/assets/package-lock.json
+      - run: npm ci --prefix apps/base/ui/assets --no-audit --no-fund
+
+      # Discovery, committed CSS, Cargo.lock pinning, fmt, clippy -D warnings,
+      # the locked release build, migrate, seed-production, and GET /.
+      - name: Run the mounted gates
+        run: ./scripts/domain-ci.sh
+
+      # The gates change only the composition files and Cargo.lock; the
+      # container repository itself must stay untouched.
+      - name: Verify the gates left the container clean
+        run: git -C "apps/$CONTAINER_ROLE/$CONTAINER_ID" diff --exit-code

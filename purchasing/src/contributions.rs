@@ -1,0 +1,130 @@
+//! What Purchasing adds to the shared catalogs (Bilimbi
+//! `Bilimbi.SupplyChain.Purchasing.Contributions`): the module descriptor
+//! with its migrations and facade service, the capability vocabulary with the
+//! `tenant_owner` grants, and the Supply chain menu.
+use crate::{Purchasing, MODULE, SERVICE};
+use bilibi_authz::{CapabilityDefinition as C, RoleDefinition, VocabularyContribution, VOCABULARY};
+use bilibi_database::{Db, MutationBoundary};
+use bilibi_menu::{MenuItem, Requirement};
+use bilibi_module_registry::{Contribution, Layer, Module, Provenance, Service};
+use std::sync::Arc;
+
+// The Authz domain is "supply-chain": a capability segment may not carry an
+// underscore, while the container ID and table prefix stay "supply_chain".
+/// Reads every purchasing page and facade read ask for.
+pub const VIEW: &str = "supply-chain.purchasing.view";
+/// Maintains suppliers and tax codes.
+pub const CONFIGURE: &str = "supply-chain.purchasing.configuration.manage";
+/// Creates, submits and cancels purchase requests.
+pub const MANAGE_REQUESTS: &str = "supply-chain.purchasing.requests.manage";
+/// Approves or rejects a submitted purchase request.
+pub const APPROVE_REQUESTS: &str = "supply-chain.purchasing.requests.approve";
+/// Creates, submits, sends, amends, closes and cancels purchase orders.
+pub const MANAGE_ORDERS: &str = "supply-chain.purchasing.orders.manage";
+/// Approves a submitted purchase order or returns it to draft.
+pub const APPROVE_ORDERS: &str = "supply-chain.purchasing.orders.approve";
+/// Records or reverses goods received against a sent order; Receiving's seam.
+pub const RECEIVE_ORDERS: &str = "supply-chain.purchasing.orders.receive";
+/// Every Purchasing capability; the Tenant Owner role holds them all.
+pub const CAPABILITIES: [&str; 7] = [
+    VIEW,
+    CONFIGURE,
+    MANAGE_REQUESTS,
+    APPROVE_REQUESTS,
+    MANAGE_ORDERS,
+    APPROVE_ORDERS,
+    RECEIVE_ORDERS,
+];
+
+macro_rules! provenance {
+    () => {
+        Provenance {
+            module: MODULE,
+            source: file!(),
+            line: line!(),
+        }
+    };
+}
+
+inventory::submit! {
+    Module {
+        id: MODULE,
+        layer: Layer::Domains,
+        dependencies: &["base/authz", "base/database", "base/menu", "base/tenancy", "core/company"],
+        migrations: &[(
+            "supply-chain-purchasing-001-suppliers-tax-codes",
+            include_str!("../migrations/001-suppliers-tax-codes.sql"),
+        )],
+        services: &[Service {
+            id: SERVICE,
+            factory: |services| {
+                Ok(Arc::new(Purchasing::new(
+                    services.get::<Db>("base/database.pool")?.as_ref().clone(),
+                    services.get::<MutationBoundary>("base/database.mutations")?,
+                )))
+            },
+        }],
+    }
+}
+
+// Bilibi merges verbs across modules, so `approve` and `receive` are declared
+// here beside Base's own; only a duplicate capability key would fail boot.
+inventory::submit! {
+    Contribution::new(VOCABULARY, "supply_chain/purchasing.vocabulary", provenance!(), &VocabularyContribution {
+        domains: &["supply-chain"],
+        verbs: &["approve", "receive"],
+        capabilities: &[
+            C::tenant(VIEW), C::tenant(CONFIGURE), C::tenant(MANAGE_REQUESTS), C::tenant(APPROVE_REQUESTS),
+            C::tenant(MANAGE_ORDERS), C::tenant(APPROVE_ORDERS), C::tenant(RECEIVE_ORDERS),
+        ],
+        roles: &[RoleDefinition {
+            code: "tenant_owner",
+            name: "Tenant Owner",
+            description: "Contributed system role; reconciled explicitly",
+            grant_all: false,
+            capabilities: &CAPABILITIES,
+        }],
+        system_principals: &[],
+    })
+}
+
+// The Supply chain root stays hidden until an account may see a child.
+bilibi_menu::contribute!(
+    "supply_chain/purchasing",
+    MenuItem::container("supply_chain", "Supply chain")
+        .icon("clipboard-document-list")
+        .order(55)
+);
+bilibi_menu::contribute!(
+    "supply_chain/purchasing",
+    MenuItem::page(
+        "supply_chain.purchase_requests",
+        "Purchase requests",
+        "/supply-chain/purchase-requests"
+    )
+    .under("supply_chain")
+    .requires(Requirement::Capability(VIEW))
+    .order(10)
+);
+bilibi_menu::contribute!(
+    "supply_chain/purchasing",
+    MenuItem::page(
+        "supply_chain.purchase_orders",
+        "Purchase orders",
+        "/supply-chain/purchase-orders"
+    )
+    .under("supply_chain")
+    .requires(Requirement::Capability(VIEW))
+    .order(20)
+);
+bilibi_menu::contribute!(
+    "supply_chain/purchasing",
+    MenuItem::page(
+        "supply_chain.suppliers",
+        "Suppliers",
+        "/supply-chain/suppliers"
+    )
+    .under("supply_chain")
+    .requires(Requirement::Capability(VIEW))
+    .order(30)
+);
