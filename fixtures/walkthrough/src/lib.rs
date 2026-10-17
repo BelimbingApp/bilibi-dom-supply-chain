@@ -23,6 +23,8 @@ mod agent;
 mod order_events;
 mod receiving;
 
+mod receiving_pages;
+
 use bilibi_authz::{
     grants::Grants,
     roles::{self, Query, Sort},
@@ -1402,6 +1404,8 @@ pub async fn run(url: &str) -> Result<()> {
         })?;
     receiving::run(&services, &db, &manager, &admin, &viewer).await?;
     order_events::run(&services, &db, &manager, &admin, &viewer).await?;
+
+    receiving_pages::run(&services, &manager, &admin).await?;
     println!(
         "Run bilibi-web against this database and sign in as manager@example.test (password {}): the Supply chain menu offers Purchase requests, Purchase orders and Suppliers, and the Purchase requests page leaves Forklift service and Pallet wrap for the manager to decide. viewer@example.test sees no Supply chain menu.",
         bilibi_walkthrough_fixture::PASSWORD

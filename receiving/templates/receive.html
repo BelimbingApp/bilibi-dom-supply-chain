@@ -1,0 +1,45 @@
+{# Bilimbi Receiving.Web.ReceiveLive. The line grid is part of the form, not a list. #}
+{%- import "components.html" as ui -%}
+{%- import "forms.html" as forms -%}
+{%- import "feedback.html" as feedback -%}
+<div data-shared-ui>
+{% call feedback::flash_group(messages=flash) %}{% endcall %}
+{% call ui::page(id="receiving-receive", variant=bilibi_ui::PageVariant::Detail) %}
+{% call ui::header(subtitle="Record what arrived against a sent purchase order; the draft is posted from its page.", actions=back) %}Receive goods{% endcall %}
+{%- if !can_manage %}
+<div class="mt-5">{{ forbidden }}</div>
+{%- else %}
+<div class="mt-5 space-y-5">
+{% call ui::card(id="order-picker-card", title="Purchase order") %}
+<form id="order-picker" data-event="choose" data-change class="p-4">
+{% call forms::input(field=picker) %}{% endcall %}
+</form>
+{% endcall %}
+{%- if let Some(order) = order %}
+{% call ui::card(id="receipt-editor", title=format!("Goods received against PO {}", order.order_number)) %}
+<form id="receipt-form" data-event="save_receipt" class="p-4">
+<div class="grid gap-x-4 sm:grid-cols-3">
+{% call forms::input(field=received_on) %}{% endcall %}
+{% call forms::input(field=supplier_reference) %}{% endcall %}
+</div>
+{% call forms::input(field=notes) %}{% endcall %}
+<table id="receipt-form-lines" class="w-full text-left text-sm">
+<thead class="text-xs text-ink-muted"><tr><th class="px-1 py-1">#</th><th class="px-1 py-1">Description</th><th class="px-1 py-1 text-right">Ordered</th><th class="px-1 py-1 text-right">Received so far</th><th class="px-1 py-1 text-right">Outstanding</th><th class="px-1 py-1">Accepted</th><th class="px-1 py-1">Rejected</th><th class="px-1 py-1">Rejection reason</th></tr></thead>
+<tbody>
+{%- for line in lines %}
+<tr id="receipt-form-line-{{ line.id }}"><td class="px-1 py-0.5">{{ line.number }}</td><td class="px-1 py-0.5">{{ line.description }}{% if let Some(reference) = line.reference %}<span class="block text-xs text-ink-muted">{{ reference }}</span>{% endif %}</td><td class="px-1 py-0.5 text-right tabular-nums">{{ line.ordered }}</td><td class="px-1 py-0.5 text-right tabular-nums">{{ line.received }}</td><td class="px-1 py-0.5 text-right tabular-nums">{{ line.outstanding }}</td>{% for field in line.inputs %}<td class="px-1 py-0.5">{% call forms::input(field=field) %}{% endcall %}</td>{% endfor %}</tr>
+{%- endfor %}
+</tbody>
+</table>
+<p class="mb-3 mt-1 text-xs text-ink-muted">Lines with no accepted or rejected quantity are left out. Accepted goods count against the order; rejected goods need a reason.</p>
+{% call ui::button(variant=bilibi_ui::ButtonVariant::Primary, button_type="submit") %}Save draft receipt{% endcall %}
+</form>
+{% endcall %}
+{%- endif %}
+{%- if !unavailable.is_empty() %}
+<div class="mt-5">{{ unavailable }}</div>
+{%- endif %}
+</div>
+{%- endif %}
+{% endcall %}
+</div>

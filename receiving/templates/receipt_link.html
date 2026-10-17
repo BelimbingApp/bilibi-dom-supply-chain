@@ -1,0 +1,2 @@
+{#- A fact's link to a related record (Bilimbi ReceiptLive's order, original and reversal links), with an optional block after it. -#}
+<a id="{{ id }}" href="{{ href }}" class="text-link hover:underline">{{ body }}</a>{% if !after.is_empty() %}<span class="block">{{ after }}</span>{% endif %}

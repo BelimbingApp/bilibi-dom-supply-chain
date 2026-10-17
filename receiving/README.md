@@ -1,6 +1,6 @@
 # Receiving (`supply_chain/receiving`)
 
-A company's goods receipts against purchase orders, ported from Bilimbi `Bilimbi.SupplyChain.Receiving` at `4b4f95c8effbd719077b35b9f792f3de413d8dba`. S5 owns the schema and facade; S6 adds the three pages and their menu item. There are no Receiving routes or agent operations in S5.
+A company's goods receipts against purchase orders, ported from Bilimbi `Bilimbi.SupplyChain.Receiving` at `4b4f95c8effbd719077b35b9f792f3de413d8dba`. S5 owns the schema and facade; S6 adds the three pages and their menu item. Receiving has no agent operations.
 
 ## Facade
 
@@ -49,6 +49,20 @@ Each posting records one event **per line**, in line-number order, inside the bu
 - Root payload: `company_id`, `posting_id`, `posted_at` (UTC ISO instant from history), `receipt_id`, `receipt_number`, `kind`, `order_id`, `order_number`, `supplier_id`, `reverses_receipt_id`, `reason`, `received_on` (ISO date), `supplier_reference`, `notes`, `part_index` (1-based line number), `part_count`, `line`.
 - `line`: `id` (receipt-line ID), `line_number`, `order_line_id`, `order_line_number`, `description`, `unit`, `ordered_quantity`, `received_quantity`, `rejected_quantity`, `rejection_reason`. Decimals are strings; absent values are JSON null.
 - Facts are immutable posting snapshots. They exclude actors and subsequently derived reversal links. A reversal carries its own line IDs and points to the original receipt; it does not retract the original outbox row.
+
+## Pages and menu
+
+The Goods receipts menu item (`supply_chain.receipts`, order 25) sits under Purchasing's Supply chain root for accounts holding `supply-chain.receiving.view`. Service `supply_chain/receiving.pages` serves three framed live pages, each behind that capability. They work in the signed-in account's own company, read each write's capability again on every write-shaped event, and the facade checks it once more; a refusal or a lost grant is a flash with Bilimbi's sentence (`Refusal::text`), never a cleared page.
+
+| Page | Path | Bilimbi | Does |
+| --- | --- | --- | --- |
+| Goods receipts | `/supply-chain/receipts` | `ReceiptsLive` | status tabs (`?status=`, `all` by default), the receipts FlexTable newest number first (kind with the original it reverses, status with the reversal that took it back), Receive goods for `receipts.manage`, and the Over-receipt tolerance form for `configuration.manage` |
+| Receive goods | `/supply-chain/receive` | `ReceiveLive` | picks a sent or partially received order (`?order=<id>`, a read), shows each current line's ordered, received-so-far and outstanding quantities, and saves a draft from the accepted and rejected quantities and rejection reasons; rows with neither quantity are left out |
+| Goods receipt | `/supply-chain/receipts/{id}` | `ReceiptLive` | header, facts (order, original and reversal links, actors, posted time), the lines and history FlexTables (`lines_`/`history_` sort names), and Post (draft, `post-receipt`), Cancel with a reason (draft, `manage`) and Reverse with a reason (unreversed posted original, `post-receipt`) |
+
+- Every list is a FlexTable with column settings, row height, compact rows and in-memory sort over the facade's bounded rows; a compact row drops the quieter second line.
+- Choosing an order patches the address; the receive page reads Purchasing's facade under the same scope, so listing orders needs `supply-chain.purchasing.view`. A refused draft keeps the values entered; a saved one navigates to its page with "Goods receipt N saved as a draft.".
+- Post, Cancel and Reverse wait for the shared confirmation dialog, which holds the action and reason on the server and rechecks the capability when confirmed. A reversal navigates to the new reversal receipt with Bilimbi's flash. Final receipts show the final-status sentence; readers holding neither write capability see the withheld-control sentence; a missing or other-company receipt shows the unavailable state.
 
 ## Proof
 
