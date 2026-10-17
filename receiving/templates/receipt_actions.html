@@ -1,0 +1,8 @@
+{# Bilimbi Receiving.Web.ReceiptLive actions; cancel and reverse forms carry their verb and reason. #}
+{% import "forms.html" as forms %}
+<div class="mt-3 flex flex-wrap gap-2">
+{{ post }}
+{% for item in forms %}<form id="{{ item.id }}" data-event="transition" class="flex flex-wrap gap-1">{% call forms::input(field=item.action) %}{% endcall %}{% call forms::input(field=item.reason) %}{% endcall %}{{ item.button }}</form>{% endfor %}
+{% if let Some(status) = final_status %}<p id="receipt-final" class="text-sm text-ink-muted">This receipt is {{ status }}; it keeps its lines and history and takes no further action.</p>{% endif %}
+{% if forbidden %}<p id="receipt-actions-forbidden" class="text-sm text-ink-muted">You do not have permission to change goods receipts.</p>{% endif %}
+</div>

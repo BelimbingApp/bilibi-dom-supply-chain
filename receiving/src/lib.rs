@@ -7,6 +7,7 @@ mod lifecycle;
 mod records;
 mod types;
 mod validate;
+mod web;
 
 pub use contributions::{
     CAPABILITIES, CONFIGURE, GOODS_RECEIVED, MANAGE_RECEIPTS, POST_RECEIPTS, RECEIPT_REVERSED, VIEW,

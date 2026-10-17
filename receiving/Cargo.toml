@@ -8,14 +8,20 @@ license.workspace = true
 publish = false
 
 [dependencies]
+askama.workspace = true
 bilibi-authz.workspace = true
 bilibi-company.workspace = true
 bilibi-database.workspace = true
+bilibi-datetime.workspace = true
 bilibi-events.workspace = true
+bilibi-locale.workspace = true
+bilibi-menu.workspace = true
 bilibi-module-registry.workspace = true
 bilibi-supply-chain-purchasing = { path = "../purchasing" }
 bilibi-tenancy.workspace = true
+bilibi-ui.workspace = true
 inventory.workspace = true
+jiff = "0.2.38"
 rust_decimal.workspace = true
 serde_json.workspace = true
 tokio-postgres.workspace = true

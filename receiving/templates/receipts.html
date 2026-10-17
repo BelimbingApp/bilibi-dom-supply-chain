@@ -1,0 +1,23 @@
+{# Bilimbi Receiving.Web.ReceiptsLive. #}
+{%- import "components.html" as ui -%}
+{%- import "forms.html" as forms -%}
+{%- import "feedback.html" as feedback -%}
+<div data-shared-ui>
+{% call feedback::flash_group(messages=flash) %}{% endcall %}
+{% call ui::page(id="receiving-receipts") %}
+{% call ui::header(subtitle="Goods booked in against purchase orders, with what was accepted and what was rejected.", actions=actions) %}Goods receipts{% endcall %}
+{%- if can_configure %}
+{% call ui::card(id="receiving-settings", title="Over-receipt tolerance", class="mt-5") %}
+<form id="settings-form" data-event="save_settings" class="p-4">
+<p id="settings-current" class="mb-3 text-sm text-ink-muted">A line may be received up to {{ tolerance }} % over its ordered quantity.{% if let Some(user) = set_by %} <span>Set by user {{ user }}.</span>{% endif %}</p>
+<div class="flex flex-wrap items-end gap-2">
+{% call forms::input(field=percent) %}{% endcall %}
+{% call ui::button(variant=bilibi_ui::ButtonVariant::Primary, button_type="submit") %}Save tolerance{% endcall %}
+</div>
+</form>
+{% endcall %}
+{%- endif %}
+{{ tabs }}
+{% call ui::card(id="receipts", inner_class="p-0", class="mt-3") %}{{ receipts }}{% endcall %}
+{% endcall %}
+</div>

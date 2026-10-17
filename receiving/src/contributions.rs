@@ -1,11 +1,18 @@
-//! Bilimbi Receiving descriptor and capability vocabulary. Routes/menu ship
-//! with S6, so S5 does not advertise destinations that do not exist yet.
+//! Bilimbi Receiving `Contributions`: the descriptor with its facade and
+//! pages services, the capability vocabulary, the three page routes and the
+//! Goods receipts menu item under Purchasing's Supply chain root.
 use crate::{Receiving, MODULE, SERVICE};
 use bilibi_authz::{CapabilityDefinition as C, RoleDefinition, VocabularyContribution, VOCABULARY};
 use bilibi_database::{Db, MutationBoundary};
 use bilibi_events::{EventType, Events, EVENTS};
-use bilibi_module_registry::{Contribution, Layer, Module, Provenance, Service};
+use bilibi_menu::{MenuItem, Requirement};
+use bilibi_module_registry::{
+    contributions::{Access, Method, Route, ROUTES},
+    Contribution, Layer, Module, Provenance, Service,
+};
 use bilibi_supply_chain_purchasing::Purchasing;
+use bilibi_tenancy::Scope;
+use bilibi_ui::page::PageService;
 use std::sync::Arc;
 
 pub const VIEW: &str = "supply-chain.receiving.view";
@@ -28,14 +35,20 @@ macro_rules! provenance {
 inventory::submit! {
     Module {
         id: MODULE, layer: Layer::Domains,
-        dependencies: &["base/authz", "base/database", "base/events", "base/tenancy", "core/company", "supply_chain/purchasing"],
+        dependencies: &["base/authz", "base/database", "base/datetime", "base/events", "base/locale", "base/menu", "base/tenancy", "base/ui", "core/company", "supply_chain/purchasing"],
         migrations: &[("supply-chain-receiving-001-receipts", include_str!("../migrations/001-receipts.sql"))],
         services: &[Service { id: SERVICE, factory: |s| Ok(Arc::new(Receiving {
             db: s.get::<Db>("base/database.pool")?.as_ref().clone(),
             mutations: s.get::<MutationBoundary>("base/database.mutations")?,
             purchasing: s.get::<Purchasing>(bilibi_supply_chain_purchasing::SERVICE)?,
             events: s.get::<Events>(bilibi_events::SERVICE)?,
-        })) }],
+        })) }, Service { id: PAGES, factory: |s| Ok(Arc::new(PageService::<Scope, bilibi_database::Error>(Arc::new(crate::web::Pages::new(
+            s.get::<Db>("base/database.pool")?.as_ref().clone(),
+            s.get::<Receiving>(SERVICE)?,
+            s.get::<Purchasing>(bilibi_supply_chain_purchasing::SERVICE)?,
+            s.get::<bilibi_datetime::DisplayPolicy>("base/datetime.display")?,
+            s.get::<bilibi_locale::Locales>("base/locale.locales")?,
+        ))))) }],
     }
 }
 inventory::submit! {
@@ -50,3 +63,37 @@ inventory::submit! {
 }
 inventory::submit! { Contribution::new(EVENTS, GOODS_RECEIVED, provenance!(), &EventType { version: 1 }) }
 inventory::submit! { Contribution::new(EVENTS, RECEIPT_REVERSED, provenance!(), &EventType { version: 1 }) }
+
+/// The registry service ID of the module's pages.
+const PAGES: &str = "supply_chain/receiving.pages";
+/// The page paths, Bilimbi's `priv/web_routes.exs` verbatim.
+pub(crate) const RECEIPTS_PATH: &str = "/supply-chain/receipts";
+pub(crate) const RECEIVE_PATH: &str = "/supply-chain/receive";
+
+inventory::submit! {
+    Contribution::new(ROUTES, "supply_chain/receiving.receipts", provenance!(), &Route {
+        method: Method::Get, path: RECEIPTS_PATH, service: PAGES, operation: "receipts",
+        access: Access::Capability(VIEW), framed: true,
+    })
+}
+inventory::submit! {
+    Contribution::new(ROUTES, "supply_chain/receiving.receive", provenance!(), &Route {
+        method: Method::Get, path: RECEIVE_PATH, service: PAGES, operation: "receive",
+        access: Access::Capability(VIEW), framed: true,
+    })
+}
+inventory::submit! {
+    Contribution::new(ROUTES, "supply_chain/receiving.receipt", provenance!(), &Route {
+        method: Method::Get, path: "/supply-chain/receipts/{id}", service: PAGES, operation: "receipt",
+        access: Access::Capability(VIEW), framed: true,
+    })
+}
+
+// The "supply_chain" root is Purchasing's, a declared dependency.
+bilibi_menu::contribute!(
+    "supply_chain/receiving",
+    MenuItem::page("supply_chain.receipts", "Goods receipts", RECEIPTS_PATH)
+        .under("supply_chain")
+        .requires(Requirement::Capability(VIEW))
+        .order(25)
+);
