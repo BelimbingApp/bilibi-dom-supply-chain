@@ -1,0 +1,35 @@
+{#- The company's suppliers and tax codes (Bilimbi
+    `Purchasing.Web.SuppliersLive` render). The tables are rendered by
+    src/web/suppliers.rs through the shared FlexTable; this file lays out the
+    page, its add forms and the cards around the tables. -#}
+{%- import "components.html" as ui -%}
+{%- import "forms.html" as forms -%}
+{%- import "feedback.html" as feedback -%}
+<div data-shared-ui>
+{% call feedback::flash_group(messages=flash) %}{% endcall %}
+{% call ui::page(id="purchasing-suppliers") %}
+{% call ui::header(subtitle="The parties this company buys from, and the tax codes its orders price with.") %}Suppliers{% endcall %}
+{%- if can_configure %}
+{% call ui::card(id="supplier-editor", title="New supplier", class="mt-5") %}
+<form id="supplier-form" data-event="save_supplier" class="p-4">
+<div class="grid gap-x-4 sm:grid-cols-2">
+{%- for field in supplier_fields %}{% call forms::input(field=field) %}{% endcall %}{% endfor -%}
+</div>
+{% call ui::button(variant=bilibi_ui::ButtonVariant::Primary, button_type="submit") %}Add supplier{% endcall %}
+</form>
+{% endcall %}
+{%- endif %}
+{% call ui::card(id="suppliers", inner_class="p-0", class="mt-5") %}{{ suppliers }}{% endcall %}
+{%- if can_configure %}
+{% call ui::card(id="tax-code-editor", title="New tax code", class="mt-5") %}
+<form id="tax-code-form" data-event="save_tax_code" class="p-4">
+<div class="grid gap-x-4 sm:grid-cols-3">
+{%- for field in tax_code_fields %}{% call forms::input(field=field) %}{% endcall %}{% endfor -%}
+</div>
+{% call ui::button(variant=bilibi_ui::ButtonVariant::Primary, button_type="submit") %}Add tax code{% endcall %}
+</form>
+{% endcall %}
+{%- endif %}
+{% call ui::card(id="tax-codes", inner_class="p-0", class="mt-5") %}{{ tax_codes }}{% endcall %}
+{% endcall %}
+</div>

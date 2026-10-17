@@ -1,6 +1,6 @@
 //! Purchasing (`supply_chain/purchasing`): a company's suppliers and tax
-//! codes and its purchase requests, and from a later version its purchase
-//! orders.
+//! codes, its purchase requests, the draft purchase orders raised from them,
+//! and the Suppliers and Purchase requests pages.
 //!
 //! This is the module's one facade. Other modules read and write through
 //! [`Purchasing`], resolved from the registry as [`SERVICE`]; the schema, SQL
@@ -15,10 +15,12 @@
 //! archived company is [`Outcome::CompanyArchived`] and one company's
 //! purchasing writes run one at a time. See `README.md`.
 mod contributions;
+mod orders;
 mod requests;
 mod suppliers;
 mod tax_codes;
 mod validate;
+mod web;
 
 pub use contributions::{
     APPROVE_ORDERS, APPROVE_REQUESTS, CAPABILITIES, CONFIGURE, MANAGE_ORDERS, MANAGE_REQUESTS,
@@ -63,6 +65,8 @@ pub enum Refusal {
     /// The input broke a rule; one message per field (an invalid changeset).
     Invalid(Vec<FieldError>),
     SupplierNotFound,
+    /// The supplier named for an order is deactivated.
+    SupplierInactive,
     TaxCodeNotFound,
     RequestNotFound,
     /// The record is in `status`, from which the action toward `target`
@@ -94,6 +98,7 @@ impl Refusal {
                 .collect::<Vec<_>>()
                 .join(" "),
             Self::SupplierNotFound => "That supplier is no longer available.".into(),
+            Self::SupplierInactive => "Choose an active supplier.".into(),
             Self::TaxCodeNotFound => "That tax code is no longer available.".into(),
             Self::RequestNotFound => "That purchase request is no longer available.".into(),
             Self::InvalidTransition { status, .. } => format!(
@@ -355,6 +360,66 @@ pub struct RequestChanges {
     pub justification: Option<String>,
     pub needed_on: Option<String>,
     pub lines: Option<Vec<NewRequestLine>>,
+}
+
+/// The statuses a purchase order moves through, persisted under these
+/// names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrderStatus {
+    Draft,
+    Submitted,
+    Approved,
+    Sent,
+    PartiallyReceived,
+    Closed,
+    Cancelled,
+}
+impl OrderStatus {
+    pub const ALL: [Self; 7] = [
+        Self::Draft,
+        Self::Submitted,
+        Self::Approved,
+        Self::Sent,
+        Self::PartiallyReceived,
+        Self::Closed,
+        Self::Cancelled,
+    ];
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::Submitted => "submitted",
+            Self::Approved => "approved",
+            Self::Sent => "sent",
+            Self::PartiallyReceived => "partially_received",
+            Self::Closed => "closed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|status| status.as_str() == value)
+    }
+}
+
+/// A purchase order's header: its gapless number, the request it was raised
+/// from, its supplier, currency and status.
+#[derive(Clone, Debug)]
+pub struct Order {
+    pub id: i64,
+    pub order_number: i64,
+    pub purchase_request_id: Option<i64>,
+    pub supplier_id: i64,
+    pub currency_code: String,
+    pub status: OrderStatus,
+}
+
+/// The header of a draft order raised from a request, as the form submits
+/// it: the supplier's ID and a three-letter currency code.
+#[derive(Clone, Debug, Default)]
+pub struct NewOrderFromRequest {
+    pub supplier_id: String,
+    pub currency_code: String,
 }
 
 /// Which requests [`Purchasing::list_requests`] returns: one status or all,
@@ -678,6 +743,35 @@ impl Purchasing {
             MANAGE_REQUESTS,
             "supply_chain.purchasing.request.cancel",
             |tx| requests::cancel(&mut tx, scope, company_id, request_id, reason)
+        )
+    }
+
+    /// Drafts a purchase order from an approved request: the active supplier
+    /// and currency given, and the request's lines copied at a zero unit
+    /// price for the buyer to price. The request stays approved, so it may
+    /// be ordered more than once. Capability [`MANAGE_ORDERS`].
+    pub async fn create_order_from_request(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request_id: i64,
+        order: &NewOrderFromRequest,
+    ) -> Result<Outcome<Order>> {
+        write!(
+            self,
+            scope,
+            company_id,
+            MANAGE_ORDERS,
+            "supply_chain.purchasing.order.create_from_request",
+            |tx| async {
+                match requests::locked(&tx, scope, company_id, request_id).await? {
+                    Ok(request) => {
+                        orders::create_from_request(&mut tx, scope, company_id, request, order)
+                            .await
+                    }
+                    Err(refusal) => Ok(Outcome::Refused(refusal)),
+                }
+            }
         )
     }
 

@@ -1,0 +1,37 @@
+{#- The company's purchase requests (Bilimbi `Purchasing.Web.RequestsLive`
+    render): the draft form with its five line rows, the status tabs, the
+    FlexTable and the confirmation dialog. The tabs, table and dialog are
+    rendered by src/web/requests.rs through the shared models; this file lays
+    them out. -#}
+{%- import "components.html" as ui -%}
+{%- import "forms.html" as forms -%}
+{%- import "feedback.html" as feedback -%}
+<div data-shared-ui>
+{% call feedback::flash_group(messages=flash) %}{% endcall %}
+{% call ui::page(id="purchasing-requests") %}
+{% call ui::header(subtitle="What the company needs to buy, before a purchase order is raised.") %}Purchase requests{% endcall %}
+{%- if can_manage %}
+{% call ui::card(id="request-editor", title="New purchase request", class="mt-5") %}
+<form id="request-form" data-event="save_request" class="p-4">
+<div class="grid gap-x-4 sm:grid-cols-2">
+{%- for field in header_fields %}{% call forms::input(field=field) %}{% endcall %}{% endfor -%}
+</div>
+{% call forms::input(field=justification) %}{% endcall %}
+<table id="request-form-lines" class="w-full text-left text-sm">
+<thead class="text-xs text-ink-muted"><tr><th class="px-1 py-1">Description</th><th class="px-1 py-1">Quantity</th><th class="px-1 py-1">Unit</th><th class="px-1 py-1">Item reference</th></tr></thead>
+<tbody>
+{%- for row in lines %}
+<tr>{% for field in row %}<td class="px-1 py-0.5">{% call forms::input(field=field) %}{% endcall %}</td>{% endfor %}</tr>
+{%- endfor %}
+</tbody>
+</table>
+<p class="mb-3 mt-1 text-xs text-ink-muted">Rows without a description are ignored.</p>
+{% call ui::button(variant=bilibi_ui::ButtonVariant::Primary, button_type="submit") %}Save draft{% endcall %}
+</form>
+{% endcall %}
+{%- endif %}
+{{ tabs }}
+{% call ui::card(id="requests", inner_class="p-0", class="mt-3") %}{{ requests }}{% endcall %}
+{{ dialog }}
+{% endcall %}
+</div>
