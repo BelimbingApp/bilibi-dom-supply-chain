@@ -165,10 +165,9 @@ pub(crate) async fn update(
     let tenant = scope.tenant();
     let current = refuse!(locked(tx, scope, company_id, order_id).await?);
     refuse!(require_status(&current, &[OrderStatus::Draft], "draft"));
+    // The supplier the draft will name, given or kept, is still active.
     let supplier_id = input.supplier_id.unwrap_or(current.supplier_id);
-    if input.supplier_id.is_some() {
-        refuse!(active_supplier(tx, tenant, company_id, supplier_id).await?);
-    }
+    refuse!(active_supplier(tx, tenant, company_id, supplier_id).await?);
     let mut checks = Checks::default();
     let currency_code = match &input.currency_code {
         Some(value) => checks.take(currency_code(value)),
