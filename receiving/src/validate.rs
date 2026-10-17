@@ -37,7 +37,20 @@ pub(crate) fn number(field: &'static str, value: &str, default_zero: bool) -> Ch
         if value.is_empty() {
             return Err(FieldError::new(field, "can't be blank"));
         }
-        Decimal::from_str_exact(value).map_err(|_| FieldError::new(field, "is invalid"))?
+        // Ecto accepts exponent notation, but not Rust's digit separators.
+        // Check the mantissa exactly before from_scientific, whose base
+        // parser otherwise rounds excess precision before applying the exponent.
+        let invalid = || FieldError::new(field, "is invalid");
+        if value.contains('_') {
+            return Err(invalid());
+        }
+        let mantissa = value.split(['e', 'E']).next().ok_or_else(invalid)?;
+        let exact = Decimal::from_str_exact(mantissa).map_err(|_| invalid())?;
+        if mantissa.len() == value.len() {
+            exact
+        } else {
+            Decimal::from_scientific(value).map_err(|_| invalid())?
+        }
     };
     if n < Decimal::ZERO {
         return Err(FieldError::new(field, "must be greater than or equal to 0"));
