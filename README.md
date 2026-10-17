@@ -8,7 +8,7 @@ Bilibi checkout; it does not build on its own.
 
 | Module | Descriptor ID | Crate | Owns |
 | --- | --- | --- | --- |
-| [`purchasing/`](purchasing/README.md) | `supply_chain/purchasing` | `bilibi-supply-chain-purchasing` | each company's suppliers and tax codes, its purchase requests with lines, approval and an audited status history, draft purchase orders raised from approved requests (the full order lifecycle with amendments and receipts follows), and the Suppliers and Purchase requests pages |
+| [`purchasing/`](purchasing/README.md) | `supply_chain/purchasing` | `bilibi-supply-chain-purchasing` | each company's suppliers and tax codes, its purchase requests and its purchase orders with lines, approval, amendments, goods received and an audited status history; the `supply_chain/purchasing.order_line` port; the Suppliers and Purchase requests pages |
 
 Receiving (`supply_chain/receiving`, goods receipts against purchase orders)
 follows as a sibling module folder. Other Supply Chain modules read and write
@@ -57,14 +57,17 @@ app, installs the Platform walkthrough fixture (its tenants, accounts and
 companies), gives `manager@example.test` the Tenant Owner role, and through
 the Purchasing facade creates Company 001's first suppliers and tax codes,
 changes and deactivates them, walks three purchase requests through
-draft, update, submit, approve, reject and cancel (the grant-all
-`admin@example.test` decides what the manager submitted), drafts two orders
-from the approved request, and has the admin submit two more requests for
-the manager to decide in the browser. It prints the refusals beside the
-writes (a taken code, a broken rule, a missing grant, a request decided by
-its own submitter, a transition that no longer applies, an inactive
-supplier) and shows PostgreSQL refusing a change to an approved request,
-its lines or its history, and a transition without a history row.
+draft, update, submit, approve, reject and cancel, orders the approved one,
+prices, submits, returns, approves and sends the order, records and reverses
+goods received until it closes, amends a second order, and reads an order
+line through the `supply_chain/purchasing.order_line` port (the grant-all
+`admin@example.test` decides what the manager submitted). It prints the
+refusals beside the writes (a taken code, a broken rule, a missing grant, a
+request or order decided by its own submitter, an inactive supplier, an
+over-receipt, a transition that no longer applies) and shows PostgreSQL
+refusing a change to an approved request, a closed order, their lines or
+their history, and a transition without a history row. It also has the
+admin submit two more requests for the manager to decide in the browser.
 
 ```sh
 createdb -h 127.0.0.1 -p 5438 -U bilibi bilibi_sc_walkthrough

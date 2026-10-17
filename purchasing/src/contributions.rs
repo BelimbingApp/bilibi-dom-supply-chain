@@ -2,6 +2,7 @@
 //! `Bilimbi.SupplyChain.Purchasing.Contributions`): the module descriptor
 //! with its migrations and facade service, the capability vocabulary with the
 //! `tenant_owner` grants, and the Supply chain menu.
+use crate::port::{OrderLinePort, ORDER_LINE};
 use crate::{Purchasing, MODULE, SERVICE};
 use bilibi_authz::{CapabilityDefinition as C, RoleDefinition, VocabularyContribution, VOCABULARY};
 use bilibi_database::{Db, MutationBoundary};
@@ -10,6 +11,7 @@ use bilibi_module_registry::{
     contributions::{Access, Method, Route, ROUTES},
     Contribution, Layer, Module, Provenance, Service,
 };
+use bilibi_ports::{Port, PORTS};
 use bilibi_tenancy::Scope;
 use bilibi_ui::page::PageService;
 use std::sync::Arc;
@@ -55,7 +57,7 @@ inventory::submit! {
     Module {
         id: MODULE,
         layer: Layer::Domains,
-        dependencies: &["base/authz", "base/database", "base/menu", "base/tenancy", "base/ui", "core/company"],
+        dependencies: &["base/authz", "base/database", "base/menu", "base/ports", "base/tenancy", "base/ui", "core/company"],
         migrations: &[
             (
                 "supply-chain-purchasing-001-suppliers-tax-codes",
@@ -112,6 +114,12 @@ inventory::submit! {
         }],
         system_principals: &[],
     })
+}
+
+// Bilimbi's `OrderSource` seam: a module that may run without Supply Chain
+// reads one order line through `base/ports` (contract in README.md).
+inventory::submit! {
+    Contribution::new(PORTS, ORDER_LINE, provenance!(), &Port { provider: &OrderLinePort })
 }
 
 /// The registry service ID of the module's pages.

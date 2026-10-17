@@ -2,11 +2,10 @@
 
 Module ID: `supply_chain/purchasing`, crate `bilibi-supply-chain-purchasing`.
 A company's suppliers and tax codes, its purchase requests with lines,
-approval and an audited status history, the draft purchase orders raised
-from approved requests, and the Suppliers and Purchase requests pages; a
-later slice adds the rest of the purchase order lifecycle (its schema is
-already in place) with amendments and receipts. Other Supply Chain modules read and write through
-this module's facade; none of them reads its tables. This README is the
+approval and an audited status history, and its purchase orders with
+approval, amendments and the goods received against them, and the Suppliers
+and Purchase requests pages. Other Supply Chain modules read and write
+through this module's facade; none of them reads its tables. This README is the
 owner contract; the Bilimbi source it ports is
 [`purchasing/docs/README.md`](https://github.com/BelimbingApp/b-dom-supply-chain/blob/main/purchasing/docs/README.md).
 
@@ -34,14 +33,22 @@ records; the schema is private.
 | `approve_request` | `supply-chain.purchasing.requests.approve` | Submitted to approved, optional reason; not by its submitter |
 | `reject_request` | `supply-chain.purchasing.requests.approve` | Submitted to rejected, reason required; not by its submitter |
 | `cancel_request` | `supply-chain.purchasing.requests.manage` | Draft, submitted or approved to cancelled, reason required |
-| `create_order_from_request` | `supply-chain.purchasing.orders.manage` | A draft order from an approved request (`OrderFromRequest`: an active `supplier_id`, a three-letter `currency_code`, upper-cased), its lines copied at a zero unit price with no tax code; the request stays approved and may be ordered again |
-
-The rest of the order lifecycle (`create_order`, update, submit, approve,
-return, send, close, cancel, `amend_order`, `list_orders`, `get_order`,
-`find_order_by_number`, `get_order_line`) and
-`record_receipt`/`reverse_receipt` for Receiving come in the next slice;
-`Order` so far carries the header facts `create_order_from_request`
-returns.
+| `list_orders` | `supply-chain.purchasing.view` | Orders with their current lines and totals, newest number first; `OrderQuery` takes a status, a `supplier_id` and a `limit` (1 to 500, default 100) |
+| `get_order` | `supply-chain.purchasing.view` | One order with supplier, current lines, totals, history and amendments, or `None` |
+| `find_order_by_number` | `supply-chain.purchasing.view` | The order with that number in the company, as `get_order` returns it |
+| `get_order_line` | `supply-chain.purchasing.view` | One current or superseded line with its order's ID, number, status, supplier and currency (`OrderLineFacts`), or `None` |
+| `create_order` | `supply-chain.purchasing.orders.manage` | A draft: `supplier_id`, `currency_code`, optional `reference`, `notes`, `expected_on`, and lines |
+| `create_order_from_request` | `supply-chain.purchasing.orders.manage` | A draft from an approved request; without `lines` its lines are copied at a unit price of zero |
+| `update_order` | `supply-chain.purchasing.orders.manage` | Changes a draft's given fields (`OrderChanges`); `lines`, when given, replaces every line |
+| `submit_order` | `supply-chain.purchasing.orders.manage` | Draft to submitted; needs a line and an active supplier |
+| `approve_order` | `supply-chain.purchasing.orders.approve` | Submitted to approved, optional reason; not by its submitter |
+| `return_order` | `supply-chain.purchasing.orders.approve` | Submitted back to draft, reason required; not for an amended order |
+| `send_order` | `supply-chain.purchasing.orders.manage` | Approved to sent |
+| `close_order` | `supply-chain.purchasing.orders.manage` | Sent or partially received to closed, reason required |
+| `cancel_order` | `supply-chain.purchasing.orders.manage` (and `orders.approve` once approved) | Any open order to cancelled, reason required; never with goods received |
+| `amend_order` | `supply-chain.purchasing.orders.manage` | An approved or sent order's amendment: reason, replacement lines, header facts |
+| `record_receipt` | `supply-chain.purchasing.orders.receive` | Goods received against current lines, within a stated tolerance |
+| `reverse_receipt` | `supply-chain.purchasing.orders.receive` | Goods taken back from current lines, reason required |
 
 A write answers `Outcome::Saved(record)`, `Outcome::Refused(refusal)` or
 `Outcome::CompanyArchived`. `Refusal` is every reason short of
@@ -49,9 +56,9 @@ authorization a page names: `Invalid` (one `FieldError` per field, in
 Bilimbi's words: "can't be blank", "has already been taken", "has invalid
 format", "has more than 4 decimal places", "is invalid"; a line's field
 carries its 1-based `line`), `SupplierNotFound`, `SupplierInactive`,
-`TaxCodeNotFound`,
-`RequestNotFound`, `InvalidTransition { status, target }`, `NoLines` and
-`OwnRequest`. `Refusal::text()` is Bilimbi's reader-facing sentence for
+`TaxCodeNotFound`, `RequestNotFound`, `OrderNotFound`, `GoodsReceived`,
+`InvalidTransition { status, target }`, `NoLines`, `OwnRequest` and
+`OwnOrder`. `Refusal::text()` is Bilimbi's reader-facing sentence for
 each (`Web.Refusals.text/1`), so the pages do not drift apart in wording. A
 missing grant is `Error::Forbidden`; a company the scope cannot see is
 `Error::NotFound`.
@@ -126,6 +133,62 @@ the actor, any impersonator, the reason and the time the database recorded
 it, in the same mutation as the change. Only a draft changes; a request in
 another status is refused as `InvalidTransition`.
 
+## Purchase orders
+
+An order buys from one active supplier of the company in one currency (a
+`currency_code` of three letters, stored upper-cased; the company's
+currencies are its data, never a list here), with an optional `reference`
+(100), `notes` (1000) and `expected_on` date. Each line is a `description`
+(500), an optional `external_item_ref` (100), a `quantity` above zero, a
+`unit` (20) and a `unit_price` from zero, both under 10^16 with up to four
+decimal places, and optionally a `tax_code_id` naming an active tax code,
+whose rate the line snapshots. A line's total (quantity times unit price)
+must stay under 10^20 ("makes the line total too large"), so an order's
+totals always fit the decimal type they are computed in. The database
+numbers each company's orders 1, 2, 3, ... without gaps, and records the
+request an order was made from; a request may be ordered more than once.
+
+| From | To | Function | Who |
+| --- | --- | --- | --- |
+| (new) | draft | `create_order`, `create_order_from_request` (an approved request) | orders.manage |
+| draft | draft | `update_order` | orders.manage |
+| draft | submitted | `submit_order` (a line, an active supplier) | orders.manage |
+| submitted | approved | `approve_order` (optional reason) | orders.approve, not the submitter |
+| submitted | draft | `return_order` (reason; never once amended) | orders.approve |
+| approved | sent | `send_order` | orders.manage |
+| approved, sent | same, or submitted | `amend_order` (reason) | orders.manage |
+| sent | partially received or closed | `record_receipt` | orders.receive |
+| partially received | closed | `record_receipt`, `close_order` (reason) | orders.receive, orders.manage |
+| partially received, closed | partially received | `reverse_receipt` (reason) | orders.receive |
+| draft, submitted, approved, sent, partially received | cancelled | `cancel_order` (reason; nothing received) | orders.manage, plus orders.approve once ever approved |
+
+- **History.** Every creation and transition appends an `OrderEvent` (actor,
+  any impersonator, reason, database time) in the same mutation as the
+  change. The approver and the submitter are different people
+  (`OwnOrder`).
+- **Amendments.** An amendment of an approved or sent order is numbered per
+  order and kept for good. Its lines replace the current ones, which stay
+  on the order marked with the amendment that superseded them. A change to
+  any line (description, item reference, quantity, unit, price or tax) or to
+  the number of lines returns the order to submitted with the amender as
+  submitter, clearing its approval and sending date, so someone else
+  approves it again; a change to `reference`, `notes` or `expected_on` alone
+  keeps the status. A partially received order is closed short instead.
+- **Receipts.** Receiving's seam. `record_receipt` takes `ReceiptLine`s
+  (`line_id`, `quantity` above zero), each naming a current line once, and
+  the `tolerance_percent` (0 to 100, four places) the caller's company
+  configured: a line's received quantity stays at or below its ordered
+  quantity raised by that percentage ("exceeds the ordered quantity", or
+  "... and the tolerance"). A sent order becomes partially received; one
+  whose current lines are all received in full closes ("every line
+  received in full"). `reverse_receipt` subtracts, never below zero
+  ("exceeds what was received"), and takes a closed order back to partially
+  received with the reason in its history. The goods receipt itself is
+  Receiving's record.
+- **Totals.** A line's `line_total` is quantity times unit price and its
+  `tax_amount` that total times the rate over 100, unrounded; an order's
+  `subtotal`, `tax_total` and `total` sum its current lines.
+
 ## Database
 
 Migration `supply-chain-purchasing-001-suppliers-tax-codes` creates
@@ -156,12 +219,28 @@ migration; an applied file is never edited.
 - **Receiving** (`supply_chain/receiving`, the next module of this Domain)
   depends on this module through the descriptor and the Cargo manifest, as
   Bilimbi does, and calls the facade's `record_receipt`/`reverse_receipt`
-  under `supply-chain.purchasing.orders.receive` once they exist.
-- **Finance payables** matched a bill line to an order line through this
-  module in Bilimbi. Bilibi Domains do not reach across containers: no port,
-  dependency or SQL reference is added here. `TODO(domain-events)`: the
-  order-line facts Payables needs will be published through Base domain
-  events when that Platform slice lands.
+  under `supply-chain.purchasing.orders.receive` in its own posting
+  transaction.
+- **Order line port.** Bilimbi's Payables read an order line through the
+  runtime seam `OrderSource`. Here the module contributes the optional port
+  `supply_chain/purchasing.order_line` (`base/ports`), so a module in
+  another container reads one line now, on its own client and sealed scope,
+  with no dependency or edge on this crate, and gets `Unavailable` when
+  Supply Chain is not mounted. The provider checks
+  `supply-chain.purchasing.view` for the caller's actor and company exactly
+  as `get_order_line` does.
+  - Request: `{"company_id": <integer>, "line_id": <integer>}`, nothing else
+    (another shape is `Invalid`).
+  - Answer: the line, `{"id", "line_number", "description",
+    "external_item_ref", "quantity", "unit", "unit_price", "tax_code_id",
+    "tax_rate", "received_quantity", "amendment_id",
+    "superseded_by_amendment_id", "line_total", "tax_amount"}`, with its
+    order's `"order_id"`, `"order_number"`, `"order_status"`,
+    `"supplier_id"` and `"currency_code"`. Decimals are strings; absent
+    values are `null`. A line of no order of the company is `NotFound`.
+- **Domain events.** Nothing here is published yet: the goods-received fact
+  a Finance projection copies is Receiving's
+  (`supply_chain/receiving.*`, `apps/base/events`).
 - **Factory** inventory is reached only through a line's
   `external_item_ref`, a free reference the company fills from any
   catalogue; Purchasing never resolves it.
@@ -172,7 +251,7 @@ The Supply chain menu (`supply_chain`, order 55) offers Purchase requests
 (`/supply-chain/purchase-requests`), Purchase orders
 (`/supply-chain/purchase-orders`) and Suppliers (`/supply-chain/suppliers`)
 to accounts holding `supply-chain.purchasing.view`; the root stays hidden
-from everyone else. The module contributes the Suppliers and Purchase
+from everyone else. Amendments have no page, as in Bilimbi. The module contributes the Suppliers and Purchase
 requests pages (service `supply_chain/purchasing.pages`, both behind
 `supply-chain.purchasing.view`); the purchase order pages are the next
 slice. Both pages work in the signed-in account's own company (its

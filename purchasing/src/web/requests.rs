@@ -348,6 +348,7 @@ impl Requests {
         let order = OrderFromRequest {
             supplier_id: id(payload, "supplier_id"),
             currency_code: text(payload, "currency_code").to_owned(),
+            ..OrderFromRequest::default()
         };
         let result = self
             .core

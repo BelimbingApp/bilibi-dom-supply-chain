@@ -16,6 +16,7 @@ bilibi-company.workspace = true
 bilibi-database.workspace = true
 bilibi-menu.workspace = true
 bilibi-module-registry.workspace = true
+bilibi-ports.workspace = true
 bilibi-tenancy.workspace = true
 bilibi-ui.workspace = true
 inventory.workspace = true
