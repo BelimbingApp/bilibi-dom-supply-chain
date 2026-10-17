@@ -4,7 +4,7 @@ Module ID: `supply_chain/purchasing`, crate `bilibi-supply-chain-purchasing`.
 A company's suppliers and tax codes, its purchase requests with lines,
 approval and an audited status history, and its purchase orders with
 approval, amendments and the goods received against them, and the Suppliers
-and Purchase requests pages. Other Supply Chain modules read and write
+and Purchase requests, Purchase orders and order detail pages. Other Supply Chain modules read and write
 through this module's facade; none of them reads its tables. This README is the
 owner contract; the Bilimbi source it ports is
 [`purchasing/docs/README.md`](https://github.com/BelimbingApp/b-dom-supply-chain/blob/main/purchasing/docs/README.md).
@@ -300,7 +300,7 @@ All three use version **1** and subject **`order:<order_id>`**. The Base envelop
 
 Required input is `company_id`, `order_id`, `expected_amendment_count` (the order's current count, initially 0), `reason` and the complete replacement `lines`. Each line requires `description`, `quantity`, `unit` and `unit_price`, with optional `external_item_ref` and `tax_code_id`. Decimals are strings, not JSON numbers; the facade validates precision and bounds. Omitted line tax means no tax. Optional `reference`, `notes` and `expected_on` preserve current values when omitted and clear them when blank; dates are `YYYY-MM-DD`. Unknown fields and `null` inputs are refused. Supplier, currency, request link, actors, line identities and received quantities cannot be supplied.
 
-Preview validates the same rules as commit without business mutations and shows normalized replacement facts, resolved tax rates, existing line identities, and whether approval and sending will be cleared. Only approved and sent orders qualify. Every amendment replaces the current line identities, even if their business values are numerically unchanged. Line changes resubmit the order under the amender and require another person to approve it; header-only changes preserve status. Obtain the person's consent to the review, then commit its expiring, single-use plan code with identical ordered inputs. The result contains `record` with the saved header, current lines, exact decimal totals and lifecycle actors. It intentionally has no page URL until the order-detail page lands.
+Preview validates the same rules as commit without business mutations and shows normalized replacement facts, resolved tax rates, existing line identities, and whether approval and sending will be cleared. Only approved and sent orders qualify. Every amendment replaces the current line identities, even if their business values are numerically unchanged. Line changes resubmit the order under the amender and require another person to approve it; header-only changes preserve status. Obtain the person's consent to the review, then commit its expiring, single-use plan code with identical ordered inputs. The result contains `record` with the saved header, current lines, exact decimal totals and lifecycle actors. The result carries record data; the order is available at `/supply-chain/purchase-orders/{id}`.
 
 Commit uses the plan's `MutationTransaction`, reauthorizes through Core Company, locks the writable company and order, and captures all changes through the existing facade. Plan revalidation detects changed order or tax facts and revoked grants. `expected_amendment_count` is checked again under lock, so two amendments to the same order in one plan refuse the second and roll back the whole plan, including audit and code consumption. Use separate reviewed plans instead. Invalid values and business refusals retain the facade's text in field errors (line paths are zero-based, such as `lines.0.quantity`); missing orders return `not_found` and stale counts return `stale_plan`.
 
@@ -314,10 +314,7 @@ The Supply chain menu (`supply_chain`, order 55) offers Purchase requests
 (`/supply-chain/purchase-requests`), Purchase orders
 (`/supply-chain/purchase-orders`) and Suppliers (`/supply-chain/suppliers`)
 to accounts holding `supply-chain.purchasing.view`; the root stays hidden
-from everyone else. Amendments have no page, as in Bilimbi. The module contributes the Suppliers and Purchase
-requests pages (service `supply_chain/purchasing.pages`, both behind
-`supply-chain.purchasing.view`); the purchase order pages are the next
-slice. Both pages work in the signed-in account's own company (its
+from everyone else. Amendments have no editor, as in Bilimbi; recorded amendments appear on the order detail. The module contributes all four pages through service `supply_chain/purchasing.pages`, each behind `supply-chain.purchasing.view`. The pages work in the signed-in account's own company (its
 affiliation), read each write's capability again on every write-shaped
 event, and the facade checks it once more; a refusal or a lost grant is a
 flash with Bilimbi's sentence, never a cleared page.
@@ -339,5 +336,7 @@ flash with Bilimbi's sentence, never a cleared page.
   shared confirmation dialog, which acts on the action it holds. Approve
   and Reject are two small forms, each with its reason field, because the
   live transport posts a form without the button that submitted it.
-  Create order stays on the page with Bilimbi's flash until the order page
-  exists (`TODO(S4)`: navigate to `/supply-chain/purchase-orders/:id`).
+  Create order navigates to `/supply-chain/purchase-orders/{id}` and carries Bilimbi's success flash to the destination.
+
+- **Purchase orders** (Bilimbi `OrdersLive`): status tabs (`?status=`, `all` by default), the orders FlexTable newest number first, and the five-line New purchase order form with active supplier and tax-code choices, currency, reference, expected delivery and notes. Blank-description rows are ignored. A refused form keeps its values; a saved draft navigates to its detail with the success flash.
+- **Purchase order** (Bilimbi `OrderLive`): header and facts, current lines and received quantities, totals, history with actors and policy-formatted timestamps, and recorded amendments with added/replaced line counts. Lines, history and amendments use FlexTables with independent `lines_`, `history_` and `amendments_` sort query names, column settings and compact mode. Draft orders offer Submit; submitted orders offer Approve and, before any amendment, Return to draft; approved orders offer Mark as sent; sent and partially received orders offer Close. Nonfinal orders offer Cancel; the facade refuses cancellation after receipts. Every transition waits for a server-held confirmation and rechecks its capability when confirmed. Terminal orders retain their history and show the final-status sentence; readers without either write capability see the withheld-control sentence. Missing or other-company records show the unavailable state. Record links and detail announcements support workspace following.

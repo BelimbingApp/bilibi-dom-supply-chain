@@ -1,0 +1,8 @@
+{# Bilimbi Purchasing.Web.OrderLive actions; separate decision forms carry their verb. #}
+{% import "components.html" as ui %}{% import "forms.html" as forms %}
+<div class="mt-3 flex flex-wrap gap-2">
+{% for button in buttons %}{{ button }}{% endfor %}
+{% for item in forms %}<form id="{{ item.id }}" data-event="transition" class="flex flex-wrap gap-1">{% call forms::input(field=item.action) %}{% endcall %}{% call forms::input(field=item.reason) %}{% endcall %}{{ item.button }}</form>{% endfor %}
+{% if let Some(status) = final_status %}<p id="order-final" class="text-sm text-ink-muted">This order is {{ status }}; it keeps its history and takes no further action.</p>{% endif %}
+{% if forbidden %}<p id="order-actions-forbidden" class="text-sm text-ink-muted">You do not have permission to change purchase orders.</p>{% endif %}
+</div>
