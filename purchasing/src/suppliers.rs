@@ -61,6 +61,24 @@ pub(crate) async fn list(
         .collect()
 }
 
+/// The company's suppliers among `ids`, in any order.
+pub(crate) async fn by_ids(
+    client: &impl GenericClient,
+    tenant: i64,
+    company_id: i64,
+    ids: &[i64],
+) -> Result<Vec<Supplier>> {
+    client
+        .query(
+            &format!("SELECT {COLUMNS} FROM supply_chain_purchasing_suppliers WHERE tenant_id=$1 AND company_id=$2 AND id = ANY($3)"),
+            &[&tenant, &company_id, &ids],
+        )
+        .await?
+        .iter()
+        .map(from_row)
+        .collect()
+}
+
 pub(crate) async fn get(
     client: &impl GenericClient,
     tenant: i64,

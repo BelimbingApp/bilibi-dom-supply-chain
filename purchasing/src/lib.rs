@@ -1,6 +1,6 @@
 //! Purchasing (`supply_chain/purchasing`): a company's suppliers and tax
-//! codes and its purchase requests, and from a later version its purchase
-//! orders.
+//! codes, its purchase requests, and its purchase orders with their
+//! amendments and the goods received against them.
 //!
 //! This is the module's one facade. Other modules read and write through
 //! [`Purchasing`], resolved from the registry as [`SERVICE`]; the schema, SQL
@@ -15,6 +15,11 @@
 //! archived company is [`Outcome::CompanyArchived`] and one company's
 //! purchasing writes run one at a time. See `README.md`.
 mod contributions;
+mod order_changes;
+mod order_lifecycle;
+mod order_types;
+mod orders;
+mod port;
 mod requests;
 mod suppliers;
 mod tax_codes;
@@ -23,6 +28,10 @@ mod validate;
 pub use contributions::{
     APPROVE_ORDERS, APPROVE_REQUESTS, CAPABILITIES, CONFIGURE, MANAGE_ORDERS, MANAGE_REQUESTS,
     RECEIVE_ORDERS, VIEW,
+};
+pub use order_types::{
+    Amendment, NewOrder, NewOrderLine, Order, OrderAmendment, OrderChanges, OrderEvent,
+    OrderFromRequest, OrderLine, OrderLineFacts, OrderQuery, OrderStatus, ReceiptLine,
 };
 
 use bilibi_company::{organisation, WriteError};
@@ -63,8 +72,13 @@ pub enum Refusal {
     /// The input broke a rule; one message per field (an invalid changeset).
     Invalid(Vec<FieldError>),
     SupplierNotFound,
+    /// The order names a supplier that has been deactivated.
+    SupplierInactive,
     TaxCodeNotFound,
     RequestNotFound,
+    OrderNotFound,
+    /// Goods are received against the order, so it is not cancelled.
+    GoodsReceived,
     /// The record is in `status`, from which the action toward `target`
     /// does not apply (`{:invalid_transition, status, target}`).
     InvalidTransition {
@@ -75,6 +89,8 @@ pub enum Refusal {
     NoLines,
     /// The approver or rejecter is the person who submitted the request.
     OwnRequest,
+    /// The approver is the person who submitted (or amended) the order.
+    OwnOrder,
 }
 impl Refusal {
     /// The reader-facing sentence, as Bilimbi's `Web.Refusals.text/1` words it.
@@ -94,14 +110,21 @@ impl Refusal {
                 .collect::<Vec<_>>()
                 .join(" "),
             Self::SupplierNotFound => "That supplier is no longer available.".into(),
+            Self::SupplierInactive => "Choose an active supplier.".into(),
             Self::TaxCodeNotFound => "That tax code is no longer available.".into(),
             Self::RequestNotFound => "That purchase request is no longer available.".into(),
+            Self::OrderNotFound => "That purchase order is no longer available.".into(),
+            Self::GoodsReceived => {
+                "Goods are received against this order. Reverse the receipts, or close it instead."
+                    .into()
+            }
             Self::InvalidTransition { status, .. } => format!(
                 "This record is {}, so that action no longer applies.",
                 status.replace('_', " ")
             ),
             Self::NoLines => "Add at least one line first.".into(),
             Self::OwnRequest => "You submitted this request, so someone else decides it.".into(),
+            Self::OwnOrder => "You submitted this order, so someone else approves it.".into(),
         }
     }
 }
@@ -681,6 +704,332 @@ impl Purchasing {
         )
     }
 
+    /// Creates a draft purchase order from an approved request: the header
+    /// as for [`Purchasing::create_order`] and `lines`, or `None` to copy the
+    /// request's lines at a unit price of zero, to be priced on the draft.
+    /// The order records the request; a request may be ordered more than once
+    /// (from two suppliers, say). Capability [`MANAGE_ORDERS`].
+    pub async fn create_order_from_request(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request_id: i64,
+        order: &OrderFromRequest,
+    ) -> Result<Outcome<Order>> {
+        write!(
+            self,
+            scope,
+            company_id,
+            MANAGE_ORDERS,
+            "supply_chain.purchasing.order.create_from_request",
+            |tx| order_lifecycle::create_from_request(
+                &mut tx, scope, company_id, request_id, order
+            )
+        )
+    }
+
+    /// The company's purchase orders with their current lines and totals (no
+    /// history), newest number first. A `limit` outside 1 to [`MAX_LIMIT`] or
+    /// a `supplier_id` below 1 is `Error::Invalid`. Capability [`VIEW`].
+    pub async fn list_orders(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        query: OrderQuery,
+    ) -> Result<Vec<Order>> {
+        if !(1..=MAX_LIMIT).contains(&query.limit) || query.supplier_id.is_some_and(|id| id < 1) {
+            return Err(Error::Invalid);
+        }
+        let client = self.db.get().await?;
+        authorize(&**client, scope, company_id, VIEW).await?;
+        orders::list(&**client, scope.tenant(), company_id, query).await
+    }
+
+    /// One purchase order: its header and supplier, current lines with
+    /// totals, status history and amendments (oldest first), each amendment
+    /// with the lines it added and the IDs of those it superseded. Capability
+    /// [`VIEW`].
+    pub async fn get_order(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+    ) -> Result<Option<Order>> {
+        let client = self.db.get().await?;
+        authorize(&**client, scope, company_id, VIEW).await?;
+        orders::get(&**client, scope.tenant(), company_id, order_id).await
+    }
+
+    /// The order with this `order_number` in the company, as
+    /// [`Purchasing::get_order`] returns it. Capability [`VIEW`].
+    pub async fn find_order_by_number(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        order_number: i64,
+    ) -> Result<Option<Order>> {
+        let client = self.db.get().await?;
+        authorize(&**client, scope, company_id, VIEW).await?;
+        orders::find_by_number(&**client, scope.tenant(), company_id, order_number).await
+    }
+
+    /// One current or superseded order line with the facts another module
+    /// matches against: the line and its order's ID, number, status, supplier
+    /// and currency. Capability [`VIEW`]. The same read answers the
+    /// `supply_chain/purchasing.order_line` port on the caller's client.
+    pub async fn get_order_line(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        line_id: i64,
+    ) -> Result<Option<OrderLineFacts>> {
+        let client = self.db.get().await?;
+        order_line(&**client, scope, company_id, line_id).await
+    }
+
+    /// Creates a draft purchase order: `supplier_id` (an active supplier of
+    /// the company), `currency_code` (three letters, stored upper-cased),
+    /// optional `reference`, `notes` and `expected_on`, and lines, each a
+    /// description, quantity, unit and unit price with an optional external
+    /// item reference and tax code (an active one, whose rate the line
+    /// snapshots). A draft may have no lines yet. Capability
+    /// [`MANAGE_ORDERS`].
+    pub async fn create_order(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        order: &NewOrder,
+    ) -> Result<Outcome<Order>> {
+        write!(
+            self,
+            scope,
+            company_id,
+            MANAGE_ORDERS,
+            "supply_chain.purchasing.order.create",
+            |tx| order_lifecycle::create(&mut tx, scope, company_id, order)
+        )
+    }
+
+    /// Changes a draft order's given header fields, and replaces its lines
+    /// when `lines` is given. An order that is no longer a draft is refused
+    /// as an invalid transition. Capability [`MANAGE_ORDERS`].
+    pub async fn update_order(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+        changes: &OrderChanges,
+    ) -> Result<Outcome<Order>> {
+        write!(
+            self,
+            scope,
+            company_id,
+            MANAGE_ORDERS,
+            "supply_chain.purchasing.order.update",
+            |tx| order_lifecycle::update(&mut tx, scope, company_id, order_id, changes)
+        )
+    }
+
+    /// Submits a draft order for approval; it needs at least one line and an
+    /// active supplier. Capability [`MANAGE_ORDERS`].
+    pub async fn submit_order(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+    ) -> Result<Outcome<Order>> {
+        write!(
+            self,
+            scope,
+            company_id,
+            MANAGE_ORDERS,
+            "supply_chain.purchasing.order.submit",
+            |tx| order_lifecycle::submit(&mut tx, scope, company_id, order_id)
+        )
+    }
+
+    /// Approves a submitted order, with an optional `reason` (blank for
+    /// none). The approver is not the person who submitted it. From here on
+    /// the order changes only through [`Purchasing::amend_order`]. Capability
+    /// [`APPROVE_ORDERS`].
+    pub async fn approve_order(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+        reason: &str,
+    ) -> Result<Outcome<Order>> {
+        write!(
+            self,
+            scope,
+            company_id,
+            APPROVE_ORDERS,
+            "supply_chain.purchasing.order.approve",
+            |tx| order_lifecycle::approve(&mut tx, scope, company_id, order_id, reason)
+        )
+    }
+
+    /// Returns a submitted order to draft so it can be corrected and
+    /// resubmitted; a `reason` is required. An amended order keeps its trail,
+    /// so it is approved or cancelled instead. Capability [`APPROVE_ORDERS`].
+    pub async fn return_order(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+        reason: &str,
+    ) -> Result<Outcome<Order>> {
+        write!(
+            self,
+            scope,
+            company_id,
+            APPROVE_ORDERS,
+            "supply_chain.purchasing.order.return",
+            |tx| order_lifecycle::return_to_draft(&mut tx, scope, company_id, order_id, reason)
+        )
+    }
+
+    /// Marks an approved order as sent to its supplier. Capability
+    /// [`MANAGE_ORDERS`].
+    pub async fn send_order(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+    ) -> Result<Outcome<Order>> {
+        write!(
+            self,
+            scope,
+            company_id,
+            MANAGE_ORDERS,
+            "supply_chain.purchasing.order.send",
+            |tx| order_lifecycle::send(&mut tx, scope, company_id, order_id)
+        )
+    }
+
+    /// Closes a sent or partially received order, for example short of its
+    /// ordered quantities; a `reason` is required. An order whose lines are
+    /// all received closes by itself in [`Purchasing::record_receipt`].
+    /// Capability [`MANAGE_ORDERS`].
+    pub async fn close_order(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+        reason: &str,
+    ) -> Result<Outcome<Order>> {
+        write!(
+            self,
+            scope,
+            company_id,
+            MANAGE_ORDERS,
+            "supply_chain.purchasing.order.close",
+            |tx| order_lifecycle::close(&mut tx, scope, company_id, order_id, reason)
+        )
+    }
+
+    /// Cancels an order that is not closed or cancelled; a `reason` is
+    /// required. An order that was ever approved also needs
+    /// [`APPROVE_ORDERS`] (`Error::Forbidden` without it), and one with goods
+    /// received against a current line is refused as `GoodsReceived`.
+    /// Capability [`MANAGE_ORDERS`].
+    pub async fn cancel_order(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+        reason: &str,
+    ) -> Result<Outcome<Order>> {
+        write!(
+            self,
+            scope,
+            company_id,
+            MANAGE_ORDERS,
+            "supply_chain.purchasing.order.cancel",
+            |tx| order_lifecycle::cancel(&mut tx, scope, company_id, order_id, reason)
+        )
+    }
+
+    /// Amends an approved or sent order: records the amendment with its
+    /// `reason`, replaces the current lines (at least one; the superseded
+    /// ones stay, marked with the amendment) and applies any `reference`,
+    /// `notes` or `expected_on` given. A change to the lines returns the
+    /// order to submitted for a fresh approval by someone else; a change to
+    /// the header facts alone keeps its status. Capability [`MANAGE_ORDERS`].
+    pub async fn amend_order(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+        amendment: &OrderAmendment,
+    ) -> Result<Outcome<Order>> {
+        write!(
+            self,
+            scope,
+            company_id,
+            MANAGE_ORDERS,
+            "supply_chain.purchasing.order.amend",
+            |tx| order_changes::amend(&mut tx, scope, company_id, order_id, amendment)
+        )
+    }
+
+    /// Records goods received against a sent or partially received order:
+    /// each line adds to a current line's received quantity, which stays
+    /// within the ordered quantity raised by `tolerance_percent` (0 to 100,
+    /// the over-receipt tolerance the caller's company configured). A sent
+    /// order becomes partially received; one whose current lines are all
+    /// received in full closes. Receiving's seam. Capability
+    /// [`RECEIVE_ORDERS`].
+    pub async fn record_receipt(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+        lines: &[ReceiptLine],
+        tolerance_percent: Decimal,
+    ) -> Result<Outcome<Order>> {
+        write!(
+            self,
+            scope,
+            company_id,
+            RECEIVE_ORDERS,
+            "supply_chain.purchasing.order.record_receipt",
+            |tx| order_changes::record_receipt(
+                &mut tx,
+                scope,
+                company_id,
+                order_id,
+                lines,
+                tolerance_percent
+            )
+        )
+    }
+
+    /// Takes back goods recorded as received against a partially received
+    /// or closed order when a receipt is reversed: each line subtracts from
+    /// a current line's received quantity, never below zero, and a `reason`
+    /// is required. A closed order goes back to partially received.
+    /// Receiving's seam. Capability [`RECEIVE_ORDERS`].
+    pub async fn reverse_receipt(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+        lines: &[ReceiptLine],
+        reason: &str,
+    ) -> Result<Outcome<Order>> {
+        write!(
+            self,
+            scope,
+            company_id,
+            RECEIVE_ORDERS,
+            "supply_chain.purchasing.order.reverse_receipt",
+            |tx| order_changes::reverse_receipt(
+                &mut tx, scope, company_id, order_id, lines, reason
+            )
+        )
+    }
+
     /// Bilimbi `write/4`: the capability for the target company, then the
     /// company row locked for writing inside the mutation transaction. `None`
     /// is an archived company, already rolled back.
@@ -722,6 +1071,18 @@ async fn authorize(
     organisation::authorize_target(client, scope, company_id, capability)
         .await
         .map(|_| ())
+}
+
+/// [`Purchasing::get_order_line`] on any client, so the port answers on the
+/// caller's connection or transaction.
+async fn order_line(
+    client: &impl GenericClient,
+    scope: &Scope,
+    company_id: i64,
+    line_id: i64,
+) -> Result<Option<OrderLineFacts>> {
+    authorize(client, scope, company_id, VIEW).await?;
+    orders::line_facts(client, scope.tenant(), company_id, line_id).await
 }
 
 async fn finish<T>(tx: MutationTransaction<'_>, outcome: &Outcome<T>) -> Result<()> {

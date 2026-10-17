@@ -207,7 +207,7 @@ pub(crate) async fn get(
 }
 
 /// The locked request with its lines, or the refusal a missing one is.
-async fn locked(
+pub(crate) async fn locked(
     tx: &MutationTransaction<'_>,
     scope: &Scope,
     company_id: i64,
