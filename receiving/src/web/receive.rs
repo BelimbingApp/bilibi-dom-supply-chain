@@ -127,9 +127,9 @@ impl Receive {
                     self.flash.error(DENIED);
                     return Ok(());
                 }
-                // The order the page shows now, read again as Bilimbi's
-                // assigns hold it from the last address change.
-                self.load(scope).await?;
+                // The order the page showed, as Bilimbi's assigns hold it
+                // from the last address change: if it stopped being
+                // receivable since, the facade's refusal says why.
                 let Some(order_id) = self.order.as_ref().map(|o| o.id) else {
                     self.flash.error("Choose a purchase order first.");
                     return Ok(());

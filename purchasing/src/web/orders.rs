@@ -312,12 +312,18 @@ impl Orders {
                             .attr("inputmode", "decimal")
                             .wrapper_class(if name == "quantity" { "w-24" } else { "w-28" }),
                         "unit" => control.wrapper_class("w-24"),
-                        "tax_code_id" => control.kind(InputKind::Select).prompt("None").options(
-                            self.taxes
-                                .iter()
-                                .map(|t| Choice::new(&t.code, t.id.to_string()))
-                                .collect(),
-                        ),
+                        // A grid cell keeps no field margin (`mb-4` by default),
+                        // or the select rides above its row's inputs.
+                        "tax_code_id" => control
+                            .kind(InputKind::Select)
+                            .prompt("None")
+                            .options(
+                                self.taxes
+                                    .iter()
+                                    .map(|t| Choice::new(&t.code, t.id.to_string()))
+                                    .collect(),
+                            )
+                            .wrapper_class("w-auto"),
                         _ => control.wrapper_class("w-full"),
                     }
                 })
