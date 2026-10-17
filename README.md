@@ -8,7 +8,7 @@ Bilibi checkout; it does not build on its own.
 
 | Module | Descriptor ID | Crate | Owns |
 | --- | --- | --- | --- |
-| [`purchasing/`](purchasing/README.md) | `supply_chain/purchasing` | `bilibi-supply-chain-purchasing` | each company's suppliers and tax codes, and (in later slices) its purchase requests and purchase orders with lines, approval, amendments and an audited status history |
+| [`purchasing/`](purchasing/README.md) | `supply_chain/purchasing` | `bilibi-supply-chain-purchasing` | each company's suppliers and tax codes, its purchase requests with lines, approval and an audited status history, and (from the next slice) its purchase orders with amendments and receipts |
 
 Receiving (`supply_chain/receiving`, goods receipts against purchase orders)
 follows as a sibling module folder. Other Supply Chain modules read and write
@@ -43,9 +43,15 @@ Tenant Owner role holds every Purchasing capability.
 Proofs never use a seeded database. `fixtures/walkthrough` is an example-only
 crate: against a freshly created disposable database it migrates the composed
 app, installs the Platform walkthrough fixture (its tenants, accounts and
-companies), gives `manager@example.test` the Tenant Owner role, and creates
-Company 001's first suppliers and tax codes through the Purchasing facade,
-printing the refusals beside the writes.
+companies), gives `manager@example.test` the Tenant Owner role, and through
+the Purchasing facade creates Company 001's first suppliers and tax codes,
+changes and deactivates them, and walks three purchase requests through
+draft, update, submit, approve, reject and cancel (the grant-all
+`admin@example.test` decides what the manager submitted). It prints the
+refusals beside the writes (a taken code, a broken rule, a missing grant, a
+request decided by its own submitter, a transition that no longer applies)
+and shows PostgreSQL refusing a change to an approved request, its lines or
+its history, and a transition without a history row.
 
 ```sh
 createdb -h 127.0.0.1 -p 5438 -U bilibi bilibi_sc_walkthrough
