@@ -92,7 +92,7 @@ inventory::submit! {
                         services.get::<Events>(bilibi_events::SERVICE)?,
                     );
                     Ok(Arc::new(PageService::<Scope, bilibi_database::Error>(Arc::new(
-                        crate::web::Pages::new(db, purchasing, services.get::<bilibi_datetime::DisplayPolicy>("base/datetime.display")?, services.get::<bilibi_locale::Locales>("base/locale.resolver")?),
+                        crate::web::Pages::new(db, purchasing, services.get::<bilibi_datetime::DisplayPolicy>("base/datetime.display")?, services.get::<bilibi_locale::Locales>("base/locale.locales")?),
                     ))))
                 },
             },

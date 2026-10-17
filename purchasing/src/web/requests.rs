@@ -358,7 +358,15 @@ impl Requests {
             .create_order_from_request(scope, company_id(scope), request_id, &order)
             .await;
         match outcome(result)? {
-            Ok(order) => self.redirect = Some((super::orders::address(order.id), format!("Purchase order {} drafted from the request.", order.order_number))),
+            Ok(order) => {
+                self.redirect = Some((
+                    super::orders::address(order.id),
+                    format!(
+                        "Purchase order {} drafted from the request.",
+                        order.order_number
+                    ),
+                ))
+            }
             Err(message) => self.flash.error(message),
         }
         Ok(())
@@ -698,12 +706,18 @@ impl LiveState<Scope, Error> for Requests {
                 LiveInput::Event(payload) => self.event(request.scope, payload).await?,
             }
             self.load(request.scope).await?;
-            let (redirect, flash) = self.redirect.take().map_or((None,None), |(path,message)| (Some(path),Some((bilibi_ui::StatusKind::Success,message))));
+            let (redirect, flash) = self
+                .redirect
+                .take()
+                .map_or((None, None), |(path, message)| {
+                    (Some(path), Some((bilibi_ui::StatusKind::Success, message)))
+                });
             Ok(LiveBody {
                 html: self.render()?,
                 query: self.list.to_params(),
                 rows: self.requests.len(),
-                redirect, flash,
+                redirect,
+                flash,
                 ..LiveBody::default()
             })
         })

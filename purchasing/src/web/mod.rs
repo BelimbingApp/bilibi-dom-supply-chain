@@ -1,14 +1,15 @@
 //! The Purchasing pages (Bilimbi `Purchasing.Web`): Suppliers
-//! (`SuppliersLive`) and Purchase requests (`RequestsLive`), live pages over
+//! (`SuppliersLive`), Purchase requests (`RequestsLive`), Purchase orders
+//! (`OrdersLive`) and order detail (`OrderLive`), live pages over
 //! the [`Purchasing`] facade. Each page reads the signed-in account's own
 //! company from its sealed scope, checks the capability of every
 //! write-shaped event again before acting, and the facade checks it once
 //! more inside the write. A refusal or a lost grant is a flash, never a
 //! page-clearing error; `Refusal::text` and [`failure`] hold Bilimbi's
-//! sentences (`Web.Refusals`), so neither page words one itself.
+//! sentences (`Web.Refusals`), so pages do not word refusals themselves.
 mod lists;
-mod orders;
 mod order;
+mod orders;
 mod requests;
 mod suppliers;
 
@@ -30,8 +31,18 @@ pub(crate) struct Core {
 
 pub(crate) struct Pages(Arc<Core>);
 impl Pages {
-    pub(crate) fn new(db: Db, purchasing: Purchasing, display: Arc<bilibi_datetime::DisplayPolicy>, locales: Arc<bilibi_locale::Locales>) -> Self {
-        Self(Arc::new(Core { db, purchasing, display, locales }))
+    pub(crate) fn new(
+        db: Db,
+        purchasing: Purchasing,
+        display: Arc<bilibi_datetime::DisplayPolicy>,
+        locales: Arc<bilibi_locale::Locales>,
+    ) -> Self {
+        Self(Arc::new(Core {
+            db,
+            purchasing,
+            display,
+            locales,
+        }))
     }
 }
 
@@ -50,8 +61,19 @@ impl Page<Scope, Error> for Pages {
             let scope = request.scope.ok_or(Error::Unauthorized)?;
             let mut title = None;
             let html = match request.operation {
-                "orders" => { let mut page = orders::Orders::new(self.0.clone(), request.query, request.framed)?; page.load(scope).await?; page.render()? },
-                "order" => { let mut page = order::OrderPage::new(self.0.clone(), request.path, request.query)?; page.load(scope, true).await?; title = Some(page.title()); page.render()? },
+                "orders" => {
+                    let mut page =
+                        orders::Orders::new(self.0.clone(), request.query, request.framed)?;
+                    page.load(scope).await?;
+                    page.render()?
+                }
+                "order" => {
+                    let mut page =
+                        order::OrderPage::new(self.0.clone(), request.path, request.query)?;
+                    page.load(scope, true).await?;
+                    title = Some(page.title());
+                    page.render()?
+                }
                 "suppliers" => {
                     let mut page = suppliers::Suppliers::new(self.0.clone(), request.query)?;
                     page.load(scope).await?;
@@ -74,8 +96,16 @@ impl Page<Scope, Error> for Pages {
     fn mount<'a>(&'a self, request: PageRequest<'a, Scope>) -> MountFuture<'a, Scope, Error> {
         Box::pin(async move {
             let state: Box<dyn LiveState<Scope, Error>> = match request.operation {
-                "orders" => Box::new(orders::Orders::new(self.0.clone(), request.query, request.framed)?),
-                "order" => Box::new(order::OrderPage::new(self.0.clone(), request.path, request.query)?),
+                "orders" => Box::new(orders::Orders::new(
+                    self.0.clone(),
+                    request.query,
+                    request.framed,
+                )?),
+                "order" => Box::new(order::OrderPage::new(
+                    self.0.clone(),
+                    request.path,
+                    request.query,
+                )?),
                 "suppliers" => Box::new(suppliers::Suppliers::new(self.0.clone(), request.query)?),
                 "requests" => Box::new(requests::Requests::new(self.0.clone(), request.query)?),
                 _ => return Ok(None),

@@ -1275,6 +1275,38 @@ pub async fn run(url: &str) -> Result<()> {
         print_order(order);
     }
 
+    // Orders left for the S4 browser walkthrough: the manager can decide
+    // what the admin submitted, and can submit the admin's remaining draft.
+    for submit in [false, true] {
+        let order = saved(show(
+            "admin drafts an order for the browser walkthrough",
+            purchasing
+                .create_order(
+                    &admin,
+                    COMPANY,
+                    &NewOrder {
+                        supplier_id: code("KEDAI-BESI"),
+                        currency_code: "MYR".into(),
+                        reference: if submit {
+                            "Awaiting decision"
+                        } else {
+                            "Draft for review"
+                        }
+                        .into(),
+                        lines: vec![order_line("Packing tape", "12", "roll", "4.50", None)],
+                        ..NewOrder::default()
+                    },
+                )
+                .await,
+        ))?;
+        if submit {
+            saved(show(
+                "admin submits the browser order",
+                purchasing.submit_order(&admin, COMPANY, order.id).await,
+            ))?;
+        }
+    }
+
     // Requests someone other than the manager submitted, left for the
     // manager to decide on the Purchase requests page.
     for (title, lines) in [

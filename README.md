@@ -8,7 +8,7 @@ Bilibi checkout; it does not build on its own.
 
 | Module | Descriptor ID | Crate | Owns |
 | --- | --- | --- | --- |
-| [`purchasing/`](purchasing/README.md) | `supply_chain/purchasing` | `bilibi-supply-chain-purchasing` | each company's suppliers and tax codes, its purchase requests and its purchase orders with lines, approval, amendments, goods received and an audited status history; the `supply_chain/purchasing.order_line` port; the Suppliers and Purchase requests pages |
+| [`purchasing/`](purchasing/README.md) | `supply_chain/purchasing` | `bilibi-supply-chain-purchasing` | each company's suppliers and tax codes, its purchase requests and its purchase orders with lines, approval, amendments, goods received and an audited status history; the `supply_chain/purchasing.order_line` port; the Suppliers, Purchase requests, Purchase orders and order detail pages |
 | [`receiving/`](receiving/README.md) | `supply_chain/receiving` | `bilibi-supply-chain-receiving` | goods receipt drafts, posting, cancellation and reversal, tolerance, immutable line snapshots, net summaries and durable line events |
 
 Receiving's schema and facade are available; its pages follow in S6. Other Supply Chain modules read and write
@@ -49,8 +49,10 @@ Approved or sent orders can be amended through the reviewed agent operation `sup
 | Suppliers | `/supply-chain/suppliers` | the company's suppliers and tax codes in FlexTables, the add forms, Deactivate/Activate |
 | Purchase requests | `/supply-chain/purchase-requests` | status tabs, the five-line draft form, submit, approve or reject, cancel (each confirmed) and Create order |
 
-Purchase orders (`/supply-chain/purchase-orders`) is in the menu and comes
-with the order pages. Details are in
+| Purchase orders | `/supply-chain/purchase-orders` | status tabs, the five-line draft form and the orders FlexTable |
+| Purchase order | `/supply-chain/purchase-orders/{id}` | current lines, totals, history, amendments and confirmed submit, approve, return, send, close and cancel |
+
+Details are in
 [`purchasing/README.md`](purchasing/README.md#pages-and-menu).
 
 ## Walkthrough
@@ -93,9 +95,9 @@ deactivate one. On Purchase requests, save a draft with lines, submit it
 (confirmed), try to approve it yourself (refused), approve Forklift service
 or reject Pallet wrap with a reason, draft an order from an approved
 request with an active supplier and a currency, and cancel one; switch the
-status tabs, sort a column and try the compact rows.
+status tabs, sort a column and try the compact rows. On Purchase orders, save a draft with an active supplier, currency and line, open its detail and submit it. Use another account to approve or return it; then mark an approved order sent, close it with a reason, or cancel an order without receipts. Every transition waits for confirmation. Open the amended fixture order to inspect the replacement lines and amendment history.
 `viewer@example.test` holds no Purchasing capability: no Supply chain menu,
-and both pages answer 403.
+and every Purchasing page answers 403.
 
 ## Checks
 
