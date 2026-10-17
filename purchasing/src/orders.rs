@@ -437,6 +437,29 @@ pub(crate) async fn locked(
     Ok(Ok(order))
 }
 
+/// Amendment review on the plan's own connection. The caller holds the company
+/// lock, so current lines and active tax rates cannot change before execution.
+pub(crate) async fn amendment_current(
+    client: &dyn bilibi_agent_api::OperationClient,
+    tenant: i64,
+    company_id: i64,
+    order_id: i64,
+) -> Result<Option<Order>> {
+    let Some(row) = client.query_opt(
+        &format!("SELECT {COLUMNS} FROM supply_chain_purchasing_orders WHERE tenant_id=$1 AND company_id=$2 AND id=$3 FOR UPDATE"),
+        &[&tenant, &company_id, &order_id],
+    ).await? else {
+        return Ok(None);
+    };
+    let mut order = from_row(&row)?;
+    order.lines = client.query(
+        &format!("SELECT {LINE_COLUMNS} FROM supply_chain_purchasing_order_lines WHERE tenant_id=$1 AND company_id=$2 AND order_id=$3 AND superseded_by_amendment_id IS NULL ORDER BY line_number"),
+        &[&tenant, &company_id, &order_id],
+    ).await?.iter().map(|row| line_at(row, 0)).collect::<Result<_>>()?;
+    total(&mut order);
+    Ok(Some(order))
+}
+
 /// The saved order as `get` reads it inside the write's transaction.
 pub(crate) async fn saved(
     tx: &MutationTransaction<'_>,

@@ -6,7 +6,7 @@
 use crate::order_lifecycle::refuse;
 use crate::orders::{
     actor, insert_lines, locked, require_status, saved, set_received, supersede_lines,
-    transition_in, update_header, validate_lines, Amendable, Stamps,
+    transition_in, update_header, validate_lines, Amendable, Stamps, ValidLine,
 };
 use crate::validate::{reason, Checks};
 use crate::{
@@ -18,7 +18,7 @@ use rust_decimal::Decimal;
 use serde_json::json;
 
 /// What an approver agreed to: the lines, their quantities, prices and tax.
-fn lines_changed(before: &[OrderLine], after: &[OrderLine]) -> bool {
+fn lines_changed(before: &[OrderLine], after: &[ValidLine]) -> bool {
     before.len() != after.len()
         || before.iter().zip(after).any(|(old, new)| {
             old.description != new.description
@@ -29,6 +29,52 @@ fn lines_changed(before: &[OrderLine], after: &[OrderLine]) -> bool {
                 || old.unit_price != new.unit_price
                 || old.tax_rate != new.tax_rate
         })
+}
+
+/// Shared, nonmutating amendment preparation for the facade and agent review.
+pub(crate) struct PreparedAmendment {
+    pub(crate) reason: String,
+    pub(crate) header: Amendable,
+    pub(crate) lines: Vec<ValidLine>,
+    pub(crate) resubmitted: bool,
+}
+
+pub(crate) async fn prepare_amendment(
+    client: &dyn bilibi_agent_api::OperationClient,
+    tenant: i64,
+    company_id: i64,
+    current: &Order,
+    input: &OrderAmendment,
+) -> Result<std::result::Result<PreparedAmendment, Refusal>> {
+    if let Err(refusal) = require_status(
+        current,
+        &[OrderStatus::Approved, OrderStatus::Sent],
+        "amended",
+    ) {
+        return Ok(Err(refusal));
+    }
+    if input.lines.is_empty() {
+        return Ok(Err(Refusal::NoLines));
+    }
+    let mut checks = Checks::default();
+    let reason = checks.take(reason(&input.reason, true)).unwrap_or_default();
+    let mut header = Amendable::of(current);
+    header.apply(
+        &mut checks,
+        input.reference.as_deref(),
+        input.notes.as_deref(),
+        input.expected_on.as_deref(),
+    );
+    let lines = validate_lines(client, tenant, company_id, &mut checks, &input.lines).await?;
+    Ok(checks
+        .finish()
+        .map_err(Refusal::Invalid)
+        .map(|()| PreparedAmendment {
+            reason,
+            header,
+            resubmitted: lines_changed(&current.lines, &lines),
+            lines,
+        }))
 }
 
 /// An approved or sent order amended: the amendment row, the header's
@@ -42,27 +88,20 @@ pub(crate) async fn amend(
     company_id: i64,
     order_id: i64,
     input: &OrderAmendment,
+    expected_amendment_count: Option<i32>,
 ) -> Result<Outcome<Order>> {
     let tenant = scope.tenant();
     let current = refuse!(locked(tx, scope, company_id, order_id).await?);
-    let amendable_statuses = [OrderStatus::Approved, OrderStatus::Sent];
-    refuse!(require_status(&current, &amendable_statuses, "amended"));
-    if input.lines.is_empty() {
-        return Ok(Outcome::Refused(Refusal::NoLines));
+    if expected_amendment_count.is_some_and(|count| count != current.amendment_count) {
+        return Err(bilibi_database::Error::Conflict);
     }
-    let mut checks = Checks::default();
-    let reason = checks.take(reason(&input.reason, true)).unwrap_or_default();
-    let mut amendable = Amendable::of(&current);
-    amendable.apply(
-        &mut checks,
-        input.reference.as_deref(),
-        input.notes.as_deref(),
-        input.expected_on.as_deref(),
-    );
-    let valid_lines = validate_lines(tx, tenant, company_id, &mut checks, &input.lines).await?;
-    if let Err(errors) = checks.finish() {
-        return Ok(Outcome::Refused(Refusal::Invalid(errors)));
-    }
+    let prepared = refuse!(prepare_amendment(tx.sql(), tenant, company_id, &current, input).await?);
+    let PreparedAmendment {
+        reason,
+        header: amendable,
+        lines: valid_lines,
+        resubmitted,
+    } = prepared;
     let actor = actor(scope);
     tx.mutate(move |sql| {
         Box::pin(async move {
@@ -99,7 +138,7 @@ pub(crate) async fn amend(
             )
             .await?;
             supersede_lines(sql, &current, amendment_id, &mut changes).await?;
-            let inserted = insert_lines(
+            insert_lines(
                 sql,
                 tenant,
                 company_id,
@@ -109,7 +148,7 @@ pub(crate) async fn amend(
                 &mut changes,
             )
             .await?;
-            if lines_changed(&current.lines, &inserted) {
+            if resubmitted {
                 transition_in(
                     sql,
                     tenant,

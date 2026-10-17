@@ -19,6 +19,8 @@
 //!
 //! Never a product dependency, and never run against a real install: the
 //! Platform fixture refuses a database that already holds other accounts.
+mod agent;
+
 use bilibi_authz::{
     grants::Grants,
     roles::{self, Query, Sort},
@@ -1358,6 +1360,12 @@ pub async fn run(url: &str) -> Result<()> {
     print_suppliers(&purchasing.list_suppliers(&manager, COMPANY, false).await?);
     println!("company {COMPANY}'s tax codes:");
     print_tax_codes(&purchasing.list_tax_codes(&manager, COMPANY, false).await?);
+    agent::run(&db, &services, &purchasing, &admin)
+        .await
+        .map_err(|error| {
+            eprintln!("H7 walkthrough failed: {error}");
+            Error::Internal
+        })?;
     println!(
         "Run bilibi-web against this database and sign in as manager@example.test (password {}): the Supply chain menu offers Purchase requests, Purchase orders and Suppliers, and the Purchase requests page leaves Forklift service and Pallet wrap for the manager to decide. viewer@example.test sees no Supply chain menu.",
         bilibi_walkthrough_fixture::PASSWORD

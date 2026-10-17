@@ -29,7 +29,7 @@ fn to_json(tax_code: &TaxCode) -> Value {
 }
 
 pub(crate) async fn list(
-    client: &impl GenericClient,
+    client: &dyn bilibi_agent_api::OperationClient,
     tenant: i64,
     company_id: i64,
     active_only: bool,

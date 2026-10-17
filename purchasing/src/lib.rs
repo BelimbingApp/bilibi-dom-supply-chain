@@ -15,6 +15,7 @@
 //! company's writable lock inside its audited mutation transaction, so an
 //! archived company is [`Outcome::CompanyArchived`] and one company's
 //! purchasing writes run one at a time. See `README.md`.
+mod agent_operations;
 mod contributions;
 mod order_changes;
 mod order_lifecycle;
@@ -971,8 +972,37 @@ impl Purchasing {
             company_id,
             MANAGE_ORDERS,
             "supply_chain.purchasing.order.amend",
-            |tx| order_changes::amend(&mut tx, scope, company_id, order_id, amendment)
+            |tx| order_changes::amend(&mut tx, scope, company_id, order_id, amendment, None)
         )
+    }
+
+    /// Agent commits participate in the plan's transaction, never a second one.
+    /// The count fences multiple amendments to the same order in one plan.
+    pub(crate) async fn amend_order_in(
+        tx: &mut MutationTransaction<'_>,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+        amendment: &OrderAmendment,
+        expected_amendment_count: i32,
+    ) -> Result<Outcome<Order>> {
+        authorize(tx.sql(), scope, company_id, MANAGE_ORDERS).await?;
+        match organisation::require_writable(tx.sql(), scope, company_id, true).await {
+            Ok(_) => (),
+            Err(WriteError::Archived) => return Ok(Outcome::CompanyArchived),
+            Err(WriteError::NotFound) => return Err(Error::NotFound),
+            Err(WriteError::Access(error)) => return Err(error),
+            Err(_) => return Err(Error::Internal),
+        }
+        order_changes::amend(
+            tx,
+            scope,
+            company_id,
+            order_id,
+            amendment,
+            Some(expected_amendment_count),
+        )
+        .await
     }
 
     /// Records goods received against a sent or partially received order:
