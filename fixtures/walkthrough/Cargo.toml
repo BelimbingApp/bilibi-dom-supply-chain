@@ -13,6 +13,7 @@ publish = false
 bilibi-agent-api.workspace = true
 bilibi-authz.workspace = true
 bilibi-base.workspace = true
+bilibi-company.workspace = true
 bilibi-core.workspace = true
 bilibi-database.workspace = true
 bilibi-domains.workspace = true
@@ -21,6 +22,7 @@ bilibi-module-registry.workspace = true
 bilibi-ports.workspace = true
 bilibi-session.workspace = true
 bilibi-supply-chain-purchasing = { path = "../../purchasing" }
+bilibi-supply-chain-receiving = { path = "../../receiving" }
 bilibi-tenancy.workspace = true
 bilibi-user.workspace = true
 rust_decimal.workspace = true

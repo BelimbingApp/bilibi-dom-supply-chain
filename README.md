@@ -9,11 +9,11 @@ Bilibi checkout; it does not build on its own.
 | Module | Descriptor ID | Crate | Owns |
 | --- | --- | --- | --- |
 | [`purchasing/`](purchasing/README.md) | `supply_chain/purchasing` | `bilibi-supply-chain-purchasing` | each company's suppliers and tax codes, its purchase requests and its purchase orders with lines, approval, amendments, goods received and an audited status history; the `supply_chain/purchasing.order_line` port; the Suppliers and Purchase requests pages |
+| [`receiving/`](receiving/README.md) | `supply_chain/receiving` | `bilibi-supply-chain-receiving` | goods receipt drafts, posting, cancellation and reversal, tolerance, immutable line snapshots, net summaries and durable line events |
 
-Receiving (`supply_chain/receiving`, goods receipts against purchase orders)
-follows as a sibling module folder. Other Supply Chain modules read and write
+Receiving's schema and facade are available; its pages follow in S6. Other Supply Chain modules read and write
 purchasing records only through `bilibi_supply_chain_purchasing::Purchasing`,
-the module's facade; none reads its tables.
+the module's facade; none reads its tables. Receiving and Purchasing share one mutation transaction when posting or reversing goods, including audit and Base domain events. Cross-domain receipt consumers subscribe to the versioned events documented in `receiving/README.md`; no Receiving port is registered, following the captain's event rule.
 
 ## Mount
 
@@ -72,6 +72,8 @@ their history, and a transition without a history row. It also has the
 admin submit two more requests for the manager to decide in the browser.
 
 The same fixture also runs the H7 amendment operation through the real registry and plan services: preview leaves business records unchanged, manage-without-view succeeds, header-only changes keep status, line changes require fresh approval, and sent orders can be amended. It shows replay, stale tax facts, revoked permissions and two same-order amendments refused with atomic rollback. Plan codes and session credentials are never printed.
+
+The S5 continuation uses the Receiving facade for mixed accepted/rejected deliveries, draft replacement, cancellation, posting and reversal; exact decimal inputs, tolerance boundaries and changes between draft and post; competing concurrent deliveries; revoked grants, tenant/company isolation, impersonation and archived companies; net summaries and posting cursors. It forces a late outbox failure and a Purchasing reversal refusal to verify rollback of business records, history, audit and events. A 101-line Unicode receipt proves bounded, complete per-line events without imposing a receipt line limit. SQL probes verify retained evidence cannot be rewritten, deleted or truncated.
 
 ```sh
 createdb -h 127.0.0.1 -p 5438 -U bilibi bilibi_sc_walkthrough
