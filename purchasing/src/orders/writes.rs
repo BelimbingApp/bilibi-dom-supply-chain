@@ -71,13 +71,13 @@ fn unit_price(value: &str) -> std::result::Result<Decimal, FieldError> {
 /// Checks every line against the rules and the company's active tax codes,
 /// each line's errors numbered from 1.
 pub(crate) async fn validate_lines(
-    tx: &MutationTransaction<'_>,
+    client: &dyn bilibi_agent_api::OperationClient,
     tenant: i64,
     company_id: i64,
     checks: &mut Checks,
     lines: &[NewOrderLine],
 ) -> Result<Vec<ValidLine>> {
-    let rates: HashMap<i64, Decimal> = tax_codes::list(tx.sql(), tenant, company_id, true)
+    let rates: HashMap<i64, Decimal> = tax_codes::list(client, tenant, company_id, true)
         .await?
         .into_iter()
         .map(|tax_code| (tax_code.id, tax_code.rate))

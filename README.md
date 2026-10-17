@@ -38,6 +38,8 @@ After migrating, the Supply chain menu offers Purchase requests, Purchase
 orders and Suppliers to accounts holding `supply-chain.purchasing.view`; the
 Tenant Owner role holds every Purchasing capability.
 
+Approved or sent orders can be amended through the reviewed agent operation `supply_chain.purchasing.order.amend` on `/api/v1` and `/mcp`. It uses the existing facade, requires `supply-chain.purchasing.orders.manage`, and adds no page. The [operation contract](purchasing/README.md#reviewed-agent-amendment) documents replacement lines, the current amendment-count precondition, preview/commit, reapproval and refusals.
+
 ## Pages
 
 | Page | Path | Does |
@@ -68,6 +70,8 @@ over-receipt, a transition that no longer applies) and shows PostgreSQL
 refusing a change to an approved request, a closed order, their lines or
 their history, and a transition without a history row. It also has the
 admin submit two more requests for the manager to decide in the browser.
+
+The same fixture also runs the H7 amendment operation through the real registry and plan services: preview leaves business records unchanged, manage-without-view succeeds, header-only changes keep status, line changes require fresh approval, and sent orders can be amended. It shows replay, stale tax facts, revoked permissions and two same-order amendments refused with atomic rollback. Plan codes and session credentials are never printed.
 
 ```sh
 createdb -h 127.0.0.1 -p 5438 -U bilibi bilibi_sc_walkthrough

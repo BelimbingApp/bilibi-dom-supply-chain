@@ -57,7 +57,7 @@ inventory::submit! {
     Module {
         id: MODULE,
         layer: Layer::Domains,
-        dependencies: &["base/authz", "base/database", "base/menu", "base/ports", "base/tenancy", "base/ui", "core/company"],
+        dependencies: &["base/agent_api", "base/authz", "base/database", "base/menu", "base/ports", "base/tenancy", "base/ui", "core/company"],
         migrations: &[
             (
                 "supply-chain-purchasing-001-suppliers-tax-codes",

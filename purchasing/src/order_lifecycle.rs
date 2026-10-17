@@ -56,7 +56,8 @@ async fn insert(
         Some(&input.notes),
         Some(&input.expected_on),
     );
-    let valid_lines = validate_lines(tx, tenant, company_id, &mut checks, &input.lines).await?;
+    let valid_lines =
+        validate_lines(tx.sql(), tenant, company_id, &mut checks, &input.lines).await?;
     if let Err(errors) = checks.finish() {
         return Ok(Outcome::Refused(Refusal::Invalid(errors)));
     }
@@ -181,7 +182,9 @@ pub(crate) async fn update(
         input.expected_on.as_deref(),
     );
     let valid_lines = match &input.lines {
-        Some(lines) => Some(validate_lines(tx, tenant, company_id, &mut checks, lines).await?),
+        Some(lines) => {
+            Some(validate_lines(tx.sql(), tenant, company_id, &mut checks, lines).await?)
+        }
         None => None,
     };
     if let Err(errors) = checks.finish() {

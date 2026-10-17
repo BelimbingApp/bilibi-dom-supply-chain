@@ -245,6 +245,20 @@ migration; an applied file is never edited.
   `external_item_ref`, a free reference the company fills from any
   catalogue; Purchasing never resolves it.
 
+## Reviewed agent amendment
+
+`supply_chain.purchasing.order.amend` exposes `amend_order` through the Platform's `/api/v1` and `/mcp` plan protocol, under `supply-chain.purchasing.orders.manage`; neither `view` nor `orders.approve` is required. Describe the operation and read guide `supply_chain.purchasing.order` before constructing a plan. Direct operation calls never write. No amendment page is added.
+
+Required input is `company_id`, `order_id`, `expected_amendment_count` (the order's current count, initially 0), `reason` and the complete replacement `lines`. Each line requires `description`, `quantity`, `unit` and `unit_price`, with optional `external_item_ref` and `tax_code_id`. Decimals are strings, not JSON numbers; the facade validates precision and bounds. Omitted line tax means no tax. Optional `reference`, `notes` and `expected_on` preserve current values when omitted and clear them when blank; dates are `YYYY-MM-DD`. Unknown fields and `null` inputs are refused. Supplier, currency, request link, actors, line identities and received quantities cannot be supplied.
+
+Preview validates the same rules as commit without business mutations and shows normalized replacement facts, resolved tax rates, existing line identities, and whether approval and sending will be cleared. Only approved and sent orders qualify. Every amendment replaces the current line identities, even if their business values are numerically unchanged. Line changes resubmit the order under the amender and require another person to approve it; header-only changes preserve status. Obtain the person's consent to the review, then commit its expiring, single-use plan code with identical ordered inputs. The result contains `record` with the saved header, current lines, exact decimal totals and lifecycle actors. It intentionally has no page URL until the order-detail page lands.
+
+Commit uses the plan's `MutationTransaction`, reauthorizes through Core Company, locks the writable company and order, and captures all changes through the existing facade. Plan revalidation detects changed order or tax facts and revoked grants. `expected_amendment_count` is checked again under lock, so two amendments to the same order in one plan refuse the second and roll back the whole plan, including audit and code consumption. Use separate reviewed plans instead. Invalid values and business refusals retain the facade's text in field errors (line paths are zero-based, such as `lines.0.quantity`); missing orders return `not_found` and stale counts return `stale_plan`.
+
+Platform limitation: `OperationClient` cannot enter the generic Company writable guard. Preview authorizes with Company's equivalent object-safe `organisation::Directory::target`, then takes a tenant-scoped company row lock on the supplied plan connection and checks the locked status. This avoids a second pool connection and keeps reference facts locked through commit revalidation and execution. Commit uses `authorize_target` and `require_writable` normally. An object-safe Company writable guard would remove the narrow preview SQL workaround; no Platform code is changed here.
+
+`fixtures/walkthrough` exercises the real registry and plan services with authenticated sessions: manage without view, direct-write refusal, mutation-free preview, header-only and changed-line commits, sent-order amendments, replay, duplicate-order atomic rollback, tax drift, grant revocation and field errors. It prints no credentials or plan codes and creates records only through the facades in its disposable database.
+
 ## Pages and menu
 
 The Supply chain menu (`supply_chain`, order 55) offers Purchase requests
