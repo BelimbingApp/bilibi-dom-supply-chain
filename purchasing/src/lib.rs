@@ -415,10 +415,12 @@ pub struct Order {
 }
 
 /// The header of a draft order raised from a request, as the form submits
-/// it: the supplier's ID and a three-letter currency code.
+/// it: the supplier's ID (`None` when none was chosen) and a three-letter
+/// currency code; the order slice adds the other header facts and the
+/// lines.
 #[derive(Clone, Debug, Default)]
-pub struct NewOrderFromRequest {
-    pub supplier_id: String,
+pub struct OrderFromRequest {
+    pub supplier_id: Option<i64>,
     pub currency_code: String,
 }
 
@@ -755,7 +757,7 @@ impl Purchasing {
         scope: &Scope,
         company_id: i64,
         request_id: i64,
-        order: &NewOrderFromRequest,
+        order: &OrderFromRequest,
     ) -> Result<Outcome<Order>> {
         write!(
             self,

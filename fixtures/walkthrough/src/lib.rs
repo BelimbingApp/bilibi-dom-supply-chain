@@ -23,7 +23,7 @@ use bilibi_authz::{
 use bilibi_database::{pool, Error, Result};
 use bilibi_module_registry::{verify_composition, Services};
 use bilibi_supply_chain_purchasing::{
-    NewOrderFromRequest, NewRequest, NewRequestLine, NewSupplier, NewTaxCode, Outcome, Purchasing,
+    NewRequest, NewRequestLine, NewSupplier, NewTaxCode, OrderFromRequest, Outcome, Purchasing,
     Request, RequestChanges, RequestQuery, Supplier, SupplierChanges, TaxCode, TaxCodeChanges,
     SERVICE,
 };
@@ -565,10 +565,9 @@ pub async fn run(url: &str) -> Result<()> {
         suppliers_now
             .iter()
             .find(|supplier| supplier.code == code)
-            .map(|supplier| supplier.id.to_string())
-            .unwrap_or_default()
+            .map(|supplier| supplier.id)
     };
-    let order = |supplier: &str, currency: &str| NewOrderFromRequest {
+    let order = |supplier: &str, currency: &str| OrderFromRequest {
         supplier_id: supplier_id(supplier),
         currency_code: currency.into(),
     };
@@ -589,8 +588,8 @@ pub async fn run(url: &str) -> Result<()> {
             "manager orders the approved request from no supplier in ringgit",
             &manager,
             brackets.id,
-            NewOrderFromRequest {
-                supplier_id: String::new(),
+            OrderFromRequest {
+                supplier_id: None,
                 currency_code: "ringgit".into(),
             },
         ),

@@ -451,7 +451,6 @@ impl LiveState<Scope, Error> for Suppliers {
                 LiveInput::Params(values) => {
                     self.supplier_list = parse(values, &SUPPLIERS)?;
                     self.tax_code_list = parse(values, &TAX_CODES)?;
-                    self.rows_changed = false;
                 }
                 LiveInput::Event(payload) => self.event(request.scope, payload).await?,
             }

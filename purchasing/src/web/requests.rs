@@ -12,8 +12,8 @@ use super::lists::{columns, sort, table, TwoLineCell};
 use super::{capabilities, company_id, id, or_empty, outcome, render, text, Core, Flash};
 use crate::contributions::REQUESTS_PATH;
 use crate::{
-    NewOrderFromRequest, NewRequest, NewRequestLine, Request, RequestQuery, RequestStatus,
-    Supplier, APPROVE_REQUESTS, MANAGE_ORDERS, MANAGE_REQUESTS,
+    NewRequest, NewRequestLine, OrderFromRequest, Request, RequestQuery, RequestStatus, Supplier,
+    APPROVE_REQUESTS, MANAGE_ORDERS, MANAGE_REQUESTS,
 };
 use askama::Template;
 use bilibi_database::{Error, Result};
@@ -345,8 +345,8 @@ impl Requests {
                 .error("That purchase request is no longer available.");
             return Ok(());
         };
-        let order = NewOrderFromRequest {
-            supplier_id: text(payload, "supplier_id").to_owned(),
+        let order = OrderFromRequest {
+            supplier_id: id(payload, "supplier_id"),
             currency_code: text(payload, "currency_code").to_owned(),
         };
         let result = self

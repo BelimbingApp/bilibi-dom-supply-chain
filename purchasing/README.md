@@ -34,7 +34,7 @@ records; the schema is private.
 | `approve_request` | `supply-chain.purchasing.requests.approve` | Submitted to approved, optional reason; not by its submitter |
 | `reject_request` | `supply-chain.purchasing.requests.approve` | Submitted to rejected, reason required; not by its submitter |
 | `cancel_request` | `supply-chain.purchasing.requests.manage` | Draft, submitted or approved to cancelled, reason required |
-| `create_order_from_request` | `supply-chain.purchasing.orders.manage` | A draft order from an approved request (`NewOrderFromRequest`: an active `supplier_id`, a three-letter `currency_code`, upper-cased), its lines copied at a zero unit price with no tax code; the request stays approved and may be ordered again |
+| `create_order_from_request` | `supply-chain.purchasing.orders.manage` | A draft order from an approved request (`OrderFromRequest`: an active `supplier_id`, a three-letter `currency_code`, upper-cased), its lines copied at a zero unit price with no tax code; the request stays approved and may be ordered again |
 
 The rest of the order lifecycle (`create_order`, update, submit, approve,
 return, send, close, cancel, `amend_order`, `list_orders`, `get_order`,

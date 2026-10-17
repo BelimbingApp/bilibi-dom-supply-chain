@@ -5,9 +5,9 @@
 //! slice over the same tables (migration 002), which number the orders
 //! without gaps and refuse a commit without a history row. Private to the
 //! facade.
-use crate::validate::{Checks, BLANK, INVALID, INVALID_FORMAT};
+use crate::validate::{Checks, BLANK, INVALID_FORMAT};
 use crate::{
-    FieldError, NewOrderFromRequest, Order, OrderStatus, Outcome, Refusal, Request, RequestStatus,
+    FieldError, Order, OrderFromRequest, OrderStatus, Outcome, Refusal, Request, RequestStatus,
 };
 use bilibi_database::{Change, Error, MutationTransaction, Result};
 use bilibi_tenancy::Scope;
@@ -38,14 +38,8 @@ fn to_json(order: &Order, actor: (i64, Option<i64>)) -> Value {
     })
 }
 
-fn supplier_id(value: &str) -> std::result::Result<i64, FieldError> {
-    let value = value.trim();
-    if value.is_empty() {
-        return Err(FieldError::new("supplier_id", BLANK));
-    }
-    value
-        .parse()
-        .map_err(|_| FieldError::new("supplier_id", INVALID))
+fn supplier_id(value: Option<i64>) -> std::result::Result<i64, FieldError> {
+    value.ok_or_else(|| FieldError::new("supplier_id", BLANK))
 }
 
 /// Trimmed and upper-cased, then three letters (`^[A-Z]{3}$`).
@@ -70,7 +64,7 @@ pub(crate) async fn create_from_request(
     scope: &Scope,
     company_id: i64,
     request: Request,
-    input: &NewOrderFromRequest,
+    input: &OrderFromRequest,
 ) -> Result<Outcome<Order>> {
     if request.status != RequestStatus::Approved {
         return Ok(Outcome::Refused(Refusal::InvalidTransition {
@@ -79,7 +73,7 @@ pub(crate) async fn create_from_request(
         }));
     }
     let mut checks = Checks::default();
-    let supplier_id = checks.take(supplier_id(&input.supplier_id));
+    let supplier_id = checks.take(supplier_id(input.supplier_id));
     let currency_code = checks.take(currency_code(&input.currency_code));
     if let Err(errors) = checks.finish() {
         return Ok(Outcome::Refused(Refusal::Invalid(errors)));
