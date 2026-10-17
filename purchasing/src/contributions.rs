@@ -6,6 +6,7 @@ use crate::port::{OrderLinePort, ORDER_LINE};
 use crate::{Purchasing, MODULE, SERVICE};
 use bilibi_authz::{CapabilityDefinition as C, RoleDefinition, VocabularyContribution, VOCABULARY};
 use bilibi_database::{Db, MutationBoundary};
+use bilibi_events::{EventType, Events, EVENTS};
 use bilibi_menu::{MenuItem, Requirement};
 use bilibi_module_registry::{
     contributions::{Access, Method, Route, ROUTES},
@@ -57,7 +58,7 @@ inventory::submit! {
     Module {
         id: MODULE,
         layer: Layer::Domains,
-        dependencies: &["base/agent_api", "base/authz", "base/database", "base/menu", "base/ports", "base/tenancy", "base/ui", "core/company"],
+        dependencies: &["base/agent_api", "base/authz", "base/database", "base/events", "base/menu", "base/ports", "base/tenancy", "base/ui", "core/company"],
         migrations: &[
             (
                 "supply-chain-purchasing-001-suppliers-tax-codes",
@@ -72,9 +73,12 @@ inventory::submit! {
             Service {
                 id: SERVICE,
                 factory: |services| {
+                    let events = services.get::<Events>(bilibi_events::SERVICE)?;
+                    crate::agent_operations::bind(events.clone())?;
                     Ok(Arc::new(Purchasing::new(
                         services.get::<Db>("base/database.pool")?.as_ref().clone(),
                         services.get::<MutationBoundary>("base/database.mutations")?,
+                        events,
                     )))
                 },
             },
@@ -85,6 +89,7 @@ inventory::submit! {
                     let purchasing = Purchasing::new(
                         db.clone(),
                         services.get::<MutationBoundary>("base/database.mutations")?,
+                        services.get::<Events>(bilibi_events::SERVICE)?,
                     );
                     Ok(Arc::new(PageService::<Scope, bilibi_database::Error>(Arc::new(
                         crate::web::Pages::new(db, purchasing),
@@ -120,6 +125,16 @@ inventory::submit! {
 // reads one order line through `base/ports` (contract in README.md).
 inventory::submit! {
     Contribution::new(PORTS, ORDER_LINE, provenance!(), &Port { provider: &OrderLinePort })
+}
+
+inventory::submit! {
+    Contribution::new(EVENTS, crate::order_events::APPROVED, provenance!(), &EventType { version: 1 })
+}
+inventory::submit! {
+    Contribution::new(EVENTS, crate::order_events::AMENDED, provenance!(), &EventType { version: 1 })
+}
+inventory::submit! {
+    Contribution::new(EVENTS, crate::order_events::STATUS_CHANGED, provenance!(), &EventType { version: 1 })
 }
 
 /// The registry service ID of the module's pages.

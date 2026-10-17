@@ -11,10 +11,23 @@ use bilibi_agent_api::{
 };
 use bilibi_company::organisation;
 use bilibi_database::MutationTransaction;
+use bilibi_events::Events;
 use bilibi_module_registry::{Contribution, Provenance};
 use bilibi_tenancy::{OrganisationDirectory, Scope};
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, OnceLock},
+};
+
+// Static handlers have no service argument. Bind the installed Events service
+// once at boot (Core Company's pattern), never a pool or a second transaction.
+static EVENTS: OnceLock<Arc<Events>> = OnceLock::new();
+pub(crate) fn bind(events: Arc<Events>) -> bilibi_module_registry::Result<()> {
+    EVENTS.set(events).map_err(|_| {
+        bilibi_module_registry::RegistryError::Service("duplicate purchasing agent binding".into())
+    })
+}
 
 fn refusal(refusal: Refusal) -> Error {
     match refusal {
@@ -202,6 +215,7 @@ impl WriteHandler for Amend {
     ) -> OperationFuture<'a> {
         Box::pin(async move {
             let outcome = Purchasing::amend_order_in(
+                EVENTS.get().ok_or(bilibi_database::Error::Internal)?,
                 tx,
                 scope,
                 integer(input, "company_id")?,

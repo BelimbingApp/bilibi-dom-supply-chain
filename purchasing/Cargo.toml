@@ -15,6 +15,7 @@ bilibi-agent-api.workspace = true
 bilibi-authz.workspace = true
 bilibi-company.workspace = true
 bilibi-database.workspace = true
+bilibi-events.workspace = true
 bilibi-menu.workspace = true
 bilibi-module-registry.workspace = true
 bilibi-ports.workspace = true

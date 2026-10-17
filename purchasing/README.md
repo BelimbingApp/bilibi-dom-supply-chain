@@ -226,11 +226,8 @@ migration; an applied file is never edited.
   company. They never commit: the caller rolls back on every refusal/error.
   The pool-owning `record_receipt`/`reverse_receipt` wrappers remain available.
 - **Order line port.** Bilimbi's Payables read an order line through the
-  runtime seam `OrderSource`. Here the module contributes the optional port
-  `supply_chain/purchasing.order_line` (`base/ports`), so a module in
-  another container reads one line now, on its own client and sealed scope,
-  with no dependency or edge on this crate, and gets `Unavailable` when
-  Supply Chain is not mounted. The provider checks
+  runtime seam `OrderSource`. The existing optional port
+  `supply_chain/purchasing.order_line` (`base/ports`) remains compatible for same-domain callers on their own client and sealed scope. Cross-domain matching uses the events below instead. The provider checks
   `supply-chain.purchasing.view` for the caller's actor and company exactly
   as `get_order_line` does.
   - Request: `{"company_id": <integer>, "line_id": <integer>}`, nothing else
@@ -242,12 +239,60 @@ migration; an applied file is never edited.
     order's `"order_id"`, `"order_number"`, `"order_status"`,
     `"supplier_id"` and `"currency_code"`. Decimals are strings; absent
     values are `null`. A line of no order of the company is `NotFound`.
-- **Domain events.** Nothing here is published yet: the goods-received fact
-  a Finance projection copies is Receiving's
-  (`supply_chain/receiving.*`, `apps/base/events`).
+- **Domain events.** Finance Payables (NP2) can copy the order facts below and Receiving's `supply_chain/receiving.*` facts into its own projection. Cross-domain consumers use these events, not the legacy order-line port or SQL on Purchasing's tables.
 - **Factory** inventory is reached only through a line's
   `external_item_ref`, a free reference the company fills from any
   catalogue; Purchasing never resolves it.
+
+## Order events v1
+
+Purchasing declares three Base event types. Each facade write records its events on the same `MutationTransaction`, under the writable company and order locks; order rows, history, amendments, audit and outbox commit or roll back together. This includes the reviewed agent amendment operation and Receiving's caller-owned receipt transactions. Publication failures forbid commit even if a caller catches the error. The publisher has no Finance dependency, subscriber or cross-domain call.
+
+| Event name | When recorded |
+| --- | --- |
+| `supply_chain/purchasing.order_status_changed` | Every actual transition between existing statuses: submit, return, approve, send, cancel, manual close, amendment resubmission, receipt-driven partial/full receipt and reopening on reversal |
+| `supply_chain/purchasing.order_approved` | Each successful approval, including fresh approval after an amendment |
+| `supply_chain/purchasing.order_amended` | Every amendment, including header-only changes: even identical replacement lines have new identities |
+
+Initial draft creation and draft editing publish nothing. Refused/unauthorized writes publish nothing. Receipt quantity changes that keep the status publish nothing here; Receiving publishes its own per-line goods facts. Approval records all `order_status_changed` parts before all `order_approved` parts; a resubmitting amendment records all status parts before all amendment parts. Header-only amendments emit only `order_amended`. Every part describes the final post-operation state, including receipt quantities after a reversal.
+
+All three use version **1** and subject **`order:<order_id>`**. The Base envelope carries tenant, publisher, event name/version, idempotency key and recording time. The payload is:
+
+```json
+{
+  "company_id": 12,
+  "order_id": 42,
+  "order_number": 7,
+  "supplier_id": 9,
+  "currency_code": "MYR",
+  "order_status": "submitted",
+  "from_status": "approved",
+  "amendment_count": 1,
+  "order_event_id": 81,
+  "amendment_id": 16,
+  "snapshot_key": "amendment:16",
+  "part_index": 1,
+  "part_count": 2,
+  "lines": [{
+    "id": 101,
+    "quantity": "3.2500",
+    "unit_price": "17.1250",
+    "currency_code": "MYR",
+    "order_status": "submitted",
+    "superseded_by_amendment_id": 16,
+    "unit": "box",
+    "received_quantity": "0"
+  }]
+}
+```
+
+- IDs and counts are JSON integers. Quantities and prices are exact decimal strings (up to four decimal places); consumers must not depend on trailing zeroes. Absent cause/supersession IDs are JSON `null`. Currency, units and supplier IDs are company data. Statuses are the facade's fixed status names.
+- `order_event_id` identifies the newly appended status-history row, or is `null` for a header-only amendment. `amendment_id` identifies the amendment made by this operation, or is `null` otherwise. `from_status` is the status before this operation, equal to `order_status` on a header-only amendment. `amendment_count` is the resulting order count.
+- Each snapshot includes **all retained line generations**, current and superseded, ordered by line ID. Thus later closing/cancellation facts also update the order status attached to old line IDs. A superseded line retains its own quantity and price, and identifies the amendment that replaced it. New lines have a null `superseded_by_amendment_id`.
+- One line is recorded per part (`lines` contains one object), keeping even large orders inside Base's payload bounds. `part_index` is 1-based across retained IDs, not the reused business line numbers; `part_count` is the snapshot's total parts. Cancelling an empty draft emits one part with `lines: []`, `part_index: 1`, `part_count: 1`.
+- `snapshot_key` is `status:<order_event_id>`, `approved:<order_event_id>` or `amendment:<amendment_id>`, respectively. The Base idempotency key is `<snapshot_key>:line:<line_id>` (line `0` for the empty part). Together with tenant and publisher it identifies one immutable fact. Repeated API calls are still judged by the facade's transition/count rules, not treated as new approvals or amendments.
+- These are lifecycle snapshots, not a continuously updated draft mirror. A returned draft can delete/replace lines without an amendment. Consumers needing exact snapshot membership must reconcile all parts of a completed batch, identified by tenant, publisher, event name and `snapshot_key`. Commit/stage incomplete parts successfully: refusing an early part while waiting for later parts would block them behind it.
+- Delivery is at least once and ordered per subscriber, tenant, **publisher** and subject. Using `order:<id>` in both Purchasing and Receiving does not order the two publishers together; Payables must tolerate a receipt arriving before its order fact. New subscribers replay retained events through Base Events; an absent Finance subscriber does not block Purchasing. Consumers own their serde types and projection; the JSON contract is the only dependency. See the Platform's `apps/base/events/README.md` for delivery, grants and replay.
 
 ## Reviewed agent amendment
 
