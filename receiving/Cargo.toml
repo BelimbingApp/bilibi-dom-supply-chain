@@ -1,0 +1,21 @@
+# Bilimbi SupplyChain.Receiving; mounted in the Bilibi workspace.
+[package]
+name = "bilibi-supply-chain-receiving"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+bilibi-authz.workspace = true
+bilibi-company.workspace = true
+bilibi-database.workspace = true
+bilibi-events.workspace = true
+bilibi-module-registry.workspace = true
+bilibi-supply-chain-purchasing = { path = "../purchasing" }
+bilibi-tenancy.workspace = true
+inventory.workspace = true
+rust_decimal.workspace = true
+serde_json.workspace = true
+tokio-postgres.workspace = true

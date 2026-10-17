@@ -9,11 +9,11 @@ Bilibi checkout; it does not build on its own.
 | Module | Descriptor ID | Crate | Owns |
 | --- | --- | --- | --- |
 | [`purchasing/`](purchasing/README.md) | `supply_chain/purchasing` | `bilibi-supply-chain-purchasing` | each company's suppliers and tax codes, its purchase requests and its purchase orders with lines, approval, amendments, goods received and an audited status history; the `supply_chain/purchasing.order_line` port; the Suppliers and Purchase requests pages |
+| [`receiving/`](receiving/README.md) | `supply_chain/receiving` | `bilibi-supply-chain-receiving` | goods receipt drafts, posting, cancellation and reversal, tolerance, immutable line snapshots, net summaries and durable line events |
 
-Receiving (`supply_chain/receiving`, goods receipts against purchase orders)
-follows as a sibling module folder. Other Supply Chain modules read and write
+Receiving's schema and facade are available; its pages follow in S6. Other Supply Chain modules read and write
 purchasing records only through `bilibi_supply_chain_purchasing::Purchasing`,
-the module's facade; none reads its tables.
+the module's facade; none reads its tables. Receiving and Purchasing share one mutation transaction when posting or reversing goods, including audit and Base domain events. Cross-domain receipt consumers subscribe to the versioned events documented in `receiving/README.md`; no Receiving port is registered, following the captain's event rule.
 
 ## Mount
 

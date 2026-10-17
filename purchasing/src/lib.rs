@@ -759,8 +759,21 @@ impl Purchasing {
         order_id: i64,
     ) -> Result<Option<Order>> {
         let client = self.db.get().await?;
-        authorize(&**client, scope, company_id, VIEW).await?;
-        orders::get(&**client, scope.tenant(), company_id, order_id).await
+        self.get_order_on(&**client, scope, company_id, order_id)
+            .await
+    }
+
+    /// The same authorized read on the caller's client, including its
+    /// uncommitted writes. Receiving uses this inside its company lock.
+    pub async fn get_order_on(
+        &self,
+        client: &impl GenericClient,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+    ) -> Result<Option<Order>> {
+        authorize(client, scope, company_id, VIEW).await?;
+        orders::get(client, scope.tenant(), company_id, order_id).await
     }
 
     /// The order with this `order_number` in the company, as
@@ -1026,7 +1039,7 @@ impl Purchasing {
             company_id,
             RECEIVE_ORDERS,
             "supply_chain.purchasing.order.record_receipt",
-            |tx| order_changes::record_receipt(
+            |tx| self.record_receipt_in(
                 &mut tx,
                 scope,
                 company_id,
@@ -1056,10 +1069,45 @@ impl Purchasing {
             company_id,
             RECEIVE_ORDERS,
             "supply_chain.purchasing.order.reverse_receipt",
-            |tx| order_changes::reverse_receipt(
-                &mut tx, scope, company_id, order_id, lines, reason
-            )
+            |tx| self.reverse_receipt_in(&mut tx, scope, company_id, order_id, lines, reason)
         )
+    }
+
+    /// Participates in the caller's mutation transaction; never commits it.
+    /// The caller must roll back every refusal/error, including its own
+    /// earlier writes. Attribution must match the sealed scope. Receiving's
+    /// receipt, order changes, audit and outbox then commit together.
+    pub async fn record_receipt_in(
+        &self,
+        tx: &mut MutationTransaction<'_>,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+        lines: &[ReceiptLine],
+        tolerance_percent: Decimal,
+    ) -> Result<Outcome<Order>> {
+        if !receipt_transaction(tx, scope, company_id).await? {
+            return Ok(Outcome::CompanyArchived);
+        }
+        order_changes::record_receipt(tx, scope, company_id, order_id, lines, tolerance_percent)
+            .await
+    }
+
+    /// The reversal counterpart of [`Self::record_receipt_in`], with the
+    /// same authorization, attribution and rollback contract.
+    pub async fn reverse_receipt_in(
+        &self,
+        tx: &mut MutationTransaction<'_>,
+        scope: &Scope,
+        company_id: i64,
+        order_id: i64,
+        lines: &[ReceiptLine],
+        reason: &str,
+    ) -> Result<Outcome<Order>> {
+        if !receipt_transaction(tx, scope, company_id).await? {
+            return Ok(Outcome::CompanyArchived);
+        }
+        order_changes::reverse_receipt(tx, scope, company_id, order_id, lines, reason).await
     }
 
     /// Bilimbi `write/4`: the capability for the target company, then the
@@ -1121,5 +1169,32 @@ async fn finish<T>(tx: MutationTransaction<'_>, outcome: &Outcome<T>) -> Result<
     match outcome {
         Outcome::Saved(_) => tx.commit().await,
         Outcome::Refused(_) | Outcome::CompanyArchived => tx.rollback().await,
+    }
+}
+
+/// A sibling's transaction must attribute the same tenant, user and
+/// impersonator as the scope used for the business rows and authorization.
+async fn receipt_transaction(
+    tx: &MutationTransaction<'_>,
+    scope: &Scope,
+    company_id: i64,
+) -> Result<bool> {
+    let expected = scope.mutation_context("receipt");
+    let context = tx.context();
+    let principal = |p: &bilibi_database::Principal| (p.kind.clone(), p.id.clone());
+    if context.tenant != expected.tenant
+        || principal(&context.actor) != principal(&expected.actor)
+        || context.impersonator.as_ref().map(principal)
+            != expected.impersonator.as_ref().map(principal)
+    {
+        return Err(Error::Forbidden);
+    }
+    authorize(tx.sql(), scope, company_id, RECEIVE_ORDERS).await?;
+    match organisation::require_writable(tx.sql(), scope, company_id, true).await {
+        Ok(_) => Ok(true),
+        Err(WriteError::Archived) => Ok(false),
+        Err(WriteError::NotFound) => Err(Error::NotFound),
+        Err(WriteError::Access(error)) => Err(error),
+        Err(_) => Err(Error::Internal),
     }
 }

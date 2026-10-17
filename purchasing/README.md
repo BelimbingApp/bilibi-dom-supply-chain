@@ -216,11 +216,15 @@ migration; an applied file is never edited.
 
 ## Seams
 
-- **Receiving** (`supply_chain/receiving`, the next module of this Domain)
+- **Receiving** (`supply_chain/receiving`, the sibling module of this Domain)
   depends on this module through the descriptor and the Cargo manifest, as
-  Bilimbi does, and calls the facade's `record_receipt`/`reverse_receipt`
+  Bilimbi does, and calls the facade's `record_receipt_in`/`reverse_receipt_in`
   under `supply-chain.purchasing.orders.receive` in its own posting
-  transaction.
+  transaction. `get_order_on` reads on that transaction under Purchasing
+  `view`. The write methods verify that the transaction's tenant, actor and
+  impersonator match the sealed scope, reauthorize and lock the writable
+  company. They never commit: the caller rolls back on every refusal/error.
+  The pool-owning `record_receipt`/`reverse_receipt` wrappers remain available.
 - **Order line port.** Bilimbi's Payables read an order line through the
   runtime seam `OrderSource`. Here the module contributes the optional port
   `supply_chain/purchasing.order_line` (`base/ports`), so a module in
