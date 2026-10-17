@@ -15,6 +15,8 @@ Receiving's schema and facade are available; its pages follow in S6. Other Suppl
 purchasing records only through `bilibi_supply_chain_purchasing::Purchasing`,
 the module's facade; none reads its tables. Receiving and Purchasing share one mutation transaction when posting or reversing goods, including audit and Base domain events. Cross-domain receipt consumers subscribe to the versioned events documented in `receiving/README.md`; no Receiving port is registered, following the captain's event rule.
 
+Purchasing publishes v1 `supply_chain/purchasing.order_approved`, `order_amended` and `order_status_changed` facts on subject `order:<id>` in those same mutation transactions. The [order event contract](purchasing/README.md#order-events-v1) covers exact decimal line snapshots, superseded generations, bounded parts and delivery ordering for Finance Payables' own three-way-match projection. The legacy order-line port stays compatible for same-domain callers; cross-domain consumers use events.
+
 ## Mount
 
 Clone this repository into a Bilibi checkout at `apps/domains/supply_chain`
@@ -74,6 +76,8 @@ admin submit two more requests for the manager to decide in the browser.
 The same fixture also runs the H7 amendment operation through the real registry and plan services: preview leaves business records unchanged, manage-without-view succeeds, header-only changes keep status, line changes require fresh approval, and sent orders can be amended. It shows replay, stale tax facts, revoked permissions and two same-order amendments refused with atomic rollback. Plan codes and session credentials are never printed.
 
 The S5 continuation uses the Receiving facade for mixed accepted/rejected deliveries, draft replacement, cancellation, posting and reversal; exact decimal inputs, tolerance boundaries and changes between draft and post; competing concurrent deliveries; revoked grants, tenant/company isolation, impersonation and archived companies; net summaries and posting cursors. It forces a late outbox failure and a Purchasing reversal refusal to verify rollback of business records, history, audit and events. A 101-line Unicode receipt proves bounded, complete per-line events without imposing a receipt line limit. SQL probes verify retained evidence cannot be rewritten, deleted or truncated.
+
+The S7 continuation prints the Purchasing outbox after approval, header-only and changed-line amendments, reapproval, sending and closing; checks retained/superseded facts, empty-line cancellation and receipt close/reopen snapshots; and forces both a later-part insert failure and an application-level idempotency conflict to show that order, history, audit and outbox roll back together even if a caller catches the error and attempts commit. The existing H7 and S5 continuations also exercise order publication from real agent plans and Receiving-owned transactions. All fixture data stays in the disposable walkthrough database.
 
 ```sh
 createdb -h 127.0.0.1 -p 5438 -U bilibi bilibi_sc_walkthrough

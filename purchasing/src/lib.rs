@@ -18,6 +18,7 @@
 mod agent_operations;
 mod contributions;
 mod order_changes;
+mod order_events;
 mod order_lifecycle;
 mod order_types;
 mod orders;
@@ -39,6 +40,7 @@ pub use order_types::{
 
 use bilibi_company::{organisation, WriteError};
 use bilibi_database::{Db, Error, MutationBoundary, MutationTransaction, Result};
+use bilibi_events::Events;
 use bilibi_tenancy::Scope;
 use rust_decimal::Decimal;
 use std::{sync::Arc, time::SystemTime};
@@ -421,14 +423,31 @@ macro_rules! write {
     }};
 }
 
+/// Publish the final state under the same company/order lock and commit.
+macro_rules! order_write {
+    ($self:ident, $scope:ident, $company:ident, $order:ident, $cap:ident, $action:literal, |$tx:ident| $body:expr) => {
+        write!($self, $scope, $company, $cap, $action, |$tx| async {
+            let before = order_events::before(&$tx, $company, $order).await?;
+            let outcome = $body.await?;
+            order_events::publish(&$self.events, &mut $tx, $company, before, &outcome).await?;
+            Ok::<_, Error>(outcome)
+        })
+    };
+}
+
 /// The facade (Bilimbi `Bilimbi.SupplyChain.Purchasing`).
 pub struct Purchasing {
     db: Db,
     mutations: Arc<MutationBoundary>,
+    events: Arc<Events>,
 }
 impl Purchasing {
-    pub(crate) fn new(db: Db, mutations: Arc<MutationBoundary>) -> Self {
-        Self { db, mutations }
+    pub(crate) fn new(db: Db, mutations: Arc<MutationBoundary>, events: Arc<Events>) -> Self {
+        Self {
+            db,
+            mutations,
+            events,
+        }
     }
 
     /// The company's suppliers ordered by code; `active_only` keeps the active
@@ -854,10 +873,11 @@ impl Purchasing {
         company_id: i64,
         order_id: i64,
     ) -> Result<Outcome<Order>> {
-        write!(
+        order_write!(
             self,
             scope,
             company_id,
+            order_id,
             MANAGE_ORDERS,
             "supply_chain.purchasing.order.submit",
             |tx| order_lifecycle::submit(&mut tx, scope, company_id, order_id)
@@ -875,10 +895,11 @@ impl Purchasing {
         order_id: i64,
         reason: &str,
     ) -> Result<Outcome<Order>> {
-        write!(
+        order_write!(
             self,
             scope,
             company_id,
+            order_id,
             APPROVE_ORDERS,
             "supply_chain.purchasing.order.approve",
             |tx| order_lifecycle::approve(&mut tx, scope, company_id, order_id, reason)
@@ -895,10 +916,11 @@ impl Purchasing {
         order_id: i64,
         reason: &str,
     ) -> Result<Outcome<Order>> {
-        write!(
+        order_write!(
             self,
             scope,
             company_id,
+            order_id,
             APPROVE_ORDERS,
             "supply_chain.purchasing.order.return",
             |tx| order_lifecycle::return_to_draft(&mut tx, scope, company_id, order_id, reason)
@@ -913,10 +935,11 @@ impl Purchasing {
         company_id: i64,
         order_id: i64,
     ) -> Result<Outcome<Order>> {
-        write!(
+        order_write!(
             self,
             scope,
             company_id,
+            order_id,
             MANAGE_ORDERS,
             "supply_chain.purchasing.order.send",
             |tx| order_lifecycle::send(&mut tx, scope, company_id, order_id)
@@ -934,10 +957,11 @@ impl Purchasing {
         order_id: i64,
         reason: &str,
     ) -> Result<Outcome<Order>> {
-        write!(
+        order_write!(
             self,
             scope,
             company_id,
+            order_id,
             MANAGE_ORDERS,
             "supply_chain.purchasing.order.close",
             |tx| order_lifecycle::close(&mut tx, scope, company_id, order_id, reason)
@@ -956,10 +980,11 @@ impl Purchasing {
         order_id: i64,
         reason: &str,
     ) -> Result<Outcome<Order>> {
-        write!(
+        order_write!(
             self,
             scope,
             company_id,
+            order_id,
             MANAGE_ORDERS,
             "supply_chain.purchasing.order.cancel",
             |tx| order_lifecycle::cancel(&mut tx, scope, company_id, order_id, reason)
@@ -979,10 +1004,11 @@ impl Purchasing {
         order_id: i64,
         amendment: &OrderAmendment,
     ) -> Result<Outcome<Order>> {
-        write!(
+        order_write!(
             self,
             scope,
             company_id,
+            order_id,
             MANAGE_ORDERS,
             "supply_chain.purchasing.order.amend",
             |tx| order_changes::amend(&mut tx, scope, company_id, order_id, amendment, None)
@@ -992,6 +1018,7 @@ impl Purchasing {
     /// Agent commits participate in the plan's transaction, never a second one.
     /// The count fences multiple amendments to the same order in one plan.
     pub(crate) async fn amend_order_in(
+        events: &Events,
         tx: &mut MutationTransaction<'_>,
         scope: &Scope,
         company_id: i64,
@@ -1007,7 +1034,8 @@ impl Purchasing {
             Err(WriteError::Access(error)) => return Err(error),
             Err(_) => return Err(Error::Internal),
         }
-        order_changes::amend(
+        let before = order_events::before(tx, company_id, order_id).await?;
+        let outcome = order_changes::amend(
             tx,
             scope,
             company_id,
@@ -1015,7 +1043,9 @@ impl Purchasing {
             amendment,
             Some(expected_amendment_count),
         )
-        .await
+        .await?;
+        order_events::publish(events, tx, company_id, before, &outcome).await?;
+        Ok(outcome)
     }
 
     /// Records goods received against a sent or partially received order:
@@ -1089,8 +1119,18 @@ impl Purchasing {
         if !receipt_transaction(tx, scope, company_id).await? {
             return Ok(Outcome::CompanyArchived);
         }
-        order_changes::record_receipt(tx, scope, company_id, order_id, lines, tolerance_percent)
-            .await
+        let before = order_events::before(tx, company_id, order_id).await?;
+        let outcome = order_changes::record_receipt(
+            tx,
+            scope,
+            company_id,
+            order_id,
+            lines,
+            tolerance_percent,
+        )
+        .await?;
+        order_events::publish(&self.events, tx, company_id, before, &outcome).await?;
+        Ok(outcome)
     }
 
     /// The reversal counterpart of [`Self::record_receipt_in`], with the
@@ -1107,7 +1147,11 @@ impl Purchasing {
         if !receipt_transaction(tx, scope, company_id).await? {
             return Ok(Outcome::CompanyArchived);
         }
-        order_changes::reverse_receipt(tx, scope, company_id, order_id, lines, reason).await
+        let before = order_events::before(tx, company_id, order_id).await?;
+        let outcome =
+            order_changes::reverse_receipt(tx, scope, company_id, order_id, lines, reason).await?;
+        order_events::publish(&self.events, tx, company_id, before, &outcome).await?;
+        Ok(outcome)
     }
 
     /// Bilimbi `write/4`: the capability for the target company, then the
