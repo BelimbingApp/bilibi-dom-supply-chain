@@ -126,6 +126,7 @@ pub(super) struct Requests {
     suppliers: Vec<Supplier>,
     pending: Option<Pending>,
     flash: Flash,
+    redirect: Option<(String, String)>,
 }
 
 fn parse(query: &HashMap<String, String>) -> Result<ListState> {
@@ -161,6 +162,7 @@ impl Requests {
             suppliers: Vec::new(),
             pending: None,
             flash: Flash::default(),
+            redirect: None,
         })
     }
 
@@ -356,13 +358,7 @@ impl Requests {
             .create_order_from_request(scope, company_id(scope), request_id, &order)
             .await;
         match outcome(result)? {
-            // TODO(S4): Bilimbi navigates to the order's page with this
-            // flash (`push_navigate` to `/supply-chain/purchase-orders/:id`);
-            // switch to `LiveBody.redirect` once that page is contributed.
-            Ok(order) => self.flash.success(format!(
-                "Purchase order {} drafted from the request.",
-                order.order_number
-            )),
+            Ok(order) => self.redirect = Some((super::orders::address(order.id), format!("Purchase order {} drafted from the request.", order.order_number))),
             Err(message) => self.flash.error(message),
         }
         Ok(())
@@ -702,10 +698,12 @@ impl LiveState<Scope, Error> for Requests {
                 LiveInput::Event(payload) => self.event(request.scope, payload).await?,
             }
             self.load(request.scope).await?;
+            let (redirect, flash) = self.redirect.take().map_or((None,None), |(path,message)| (Some(path),Some((bilibi_ui::StatusKind::Success,message))));
             Ok(LiveBody {
                 html: self.render()?,
                 query: self.list.to_params(),
                 rows: self.requests.len(),
+                redirect, flash,
                 ..LiveBody::default()
             })
         })

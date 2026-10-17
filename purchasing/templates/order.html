@@ -1,0 +1,22 @@
+{# Bilimbi Purchasing.Web.OrderLive. Every read list uses the shared FlexTable. #}
+{% import "components.html" as ui %}{% import "feedback.html" as feedback %}{% import "workspace.html" as workspace %}
+<div data-shared-ui>
+{% call feedback::flash_group(messages=flash) %}{% endcall %}
+{% call ui::page(id="purchasing-order",variant=bilibi_ui::PageVariant::Detail) %}
+{% if let Some(order) = order %}
+{% call workspace::announce(kind="supply_chain/purchasing",record_id=order.id) %}{% endcall %}
+<div class="space-y-5">
+{% call ui::header(subtitle=subtitle) %}Purchase order {{ order.order_number }}{% endcall %}
+{% call ui::back_link(href="/supply-chain/purchase-orders") %}Purchase orders{% endcall %}
+{% call ui::card(id="order-details",inner_class="p-5 sm:p-6") %}{% call ui::section_heading(id="order-details-heading",title="Details") %}{% endcall %}{{ facts }}{% endcall %}
+{% call ui::card(id="order-lines",inner_class="p-0") %}{{ lines }}{% endcall %}
+{% call ui::card(id="order-actions",inner_class="p-5 sm:p-6") %}{% call ui::section_heading(id="order-actions-heading",title="Actions") %}{% endcall %}{{ actions }}{% endcall %}
+{% call ui::card(id="order-history",inner_class="p-5 sm:p-6") %}{% call ui::section_heading(id="order-history-heading",title="History",count=order.events.len()) %}{% endcall %}{{ history }}{% endcall %}
+{% if !amendments.is_empty() %}{% call ui::card(id="order-amendments",inner_class="p-5 sm:p-6") %}{% call ui::section_heading(id="order-amendments-heading",title="Amendments",count=order.amendments.len()) %}{% endcall %}{{ amendments }}{% endcall %}{% endif %}
+</div>
+{% else %}
+<div class="mt-5">{{ missing }}{% call ui::button(href="/supply-chain/purchase-orders") %}Back to purchase orders{% endcall %}</div>
+{% endif %}
+{{ dialog }}
+{% endcall %}
+</div>

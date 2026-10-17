@@ -58,7 +58,7 @@ inventory::submit! {
     Module {
         id: MODULE,
         layer: Layer::Domains,
-        dependencies: &["base/agent_api", "base/authz", "base/database", "base/events", "base/menu", "base/ports", "base/tenancy", "base/ui", "core/company"],
+        dependencies: &["base/agent_api", "base/authz", "base/database", "base/datetime", "base/events", "base/locale", "base/menu", "base/ports", "base/tenancy", "base/ui", "core/company"],
         migrations: &[
             (
                 "supply-chain-purchasing-001-suppliers-tax-codes",
@@ -92,7 +92,7 @@ inventory::submit! {
                         services.get::<Events>(bilibi_events::SERVICE)?,
                     );
                     Ok(Arc::new(PageService::<Scope, bilibi_database::Error>(Arc::new(
-                        crate::web::Pages::new(db, purchasing),
+                        crate::web::Pages::new(db, purchasing, services.get::<bilibi_datetime::DisplayPolicy>("base/datetime.display")?, services.get::<bilibi_locale::Locales>("base/locale.resolver")?),
                     ))))
                 },
             },
@@ -141,6 +141,7 @@ inventory::submit! {
 const PAGES: &str = "supply_chain/purchasing.pages";
 /// The page paths, Bilimbi's `priv/web_routes.exs` verbatim.
 pub(crate) const SUPPLIERS_PATH: &str = "/supply-chain/suppliers";
+pub(crate) const ORDERS_PATH: &str = "/supply-chain/purchase-orders";
 pub(crate) const REQUESTS_PATH: &str = "/supply-chain/purchase-requests";
 
 inventory::submit! {
@@ -192,3 +193,16 @@ bilibi_menu::contribute!(
         .requires(Requirement::Capability(VIEW))
         .order(30)
 );
+
+inventory::submit! {
+    Contribution::new(ROUTES, "supply_chain/purchasing.orders", provenance!(), &Route {
+        method: Method::Get, path: ORDERS_PATH, service: PAGES, operation: "orders",
+        access: Access::Capability(VIEW), framed: true,
+    })
+}
+inventory::submit! {
+    Contribution::new(ROUTES, "supply_chain/purchasing.order", provenance!(), &Route {
+        method: Method::Get, path: "/supply-chain/purchase-orders/{id}", service: PAGES, operation: "order",
+        access: Access::Capability(VIEW), framed: true,
+    })
+}
