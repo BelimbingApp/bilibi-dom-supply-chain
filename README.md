@@ -73,6 +73,8 @@ admin submit two more requests for the manager to decide in the browser.
 
 The same fixture also runs the H7 amendment operation through the real registry and plan services: preview leaves business records unchanged, manage-without-view succeeds, header-only changes keep status, line changes require fresh approval, and sent orders can be amended. It shows replay, stale tax facts, revoked permissions and two same-order amendments refused with atomic rollback. Plan codes and session credentials are never printed.
 
+The S5 continuation uses the Receiving facade for mixed accepted/rejected deliveries, draft replacement, cancellation, posting and reversal; exact decimal inputs, tolerance boundaries and changes between draft and post; competing concurrent deliveries; revoked grants, tenant/company isolation, impersonation and archived companies; net summaries and posting cursors. It forces a late outbox failure and a Purchasing reversal refusal to verify rollback of business records, history, audit and events. A 101-line Unicode receipt proves bounded, complete per-line events without imposing a receipt line limit. SQL probes verify retained evidence cannot be rewritten, deleted or truncated.
+
 ```sh
 createdb -h 127.0.0.1 -p 5438 -U bilibi bilibi_sc_walkthrough
 export DATABASE_URL=postgres://bilibi:bilibi@127.0.0.1:5438/bilibi_sc_walkthrough
