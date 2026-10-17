@@ -49,6 +49,14 @@ pub(crate) fn number(field: &'static str, value: &str, default_zero: bool) -> Ch
         if mantissa.len() == value.len() {
             exact
         } else {
+            let exponent = &value[mantissa.len() + 1..];
+            let digits = exponent
+                .strip_prefix('+')
+                .or_else(|| exponent.strip_prefix('-'))
+                .unwrap_or(exponent);
+            if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+                return Err(invalid());
+            }
             Decimal::from_scientific(value).map_err(|_| invalid())?
         }
     };

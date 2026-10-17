@@ -154,7 +154,7 @@ pub(super) async fn run(
             .await?,
         "zero tolerance, one ten-thousandth over",
     )?;
-    for invalid in ["-0.0001", "100.0001", "2.00001", "", "1_0", "1e-5"] {
+    for invalid in ["-0.0001", "100.0001", "2.00001", "", "1_0", "1e-5", "1e-+2"] {
         refused(
             r.configure(manager, COMPANY, invalid).await?,
             "invalid tolerance",
@@ -169,6 +169,7 @@ pub(super) async fn run(
         ("10000000000000000", "0", ""),
         ("1_0", "0", ""),
         ("1e-5", "0", ""),
+        ("1e-+2", "0", ""),
     ] {
         let mut input = receipt(&order, "1", "0");
         input.lines = vec![line(order.lines[0].id, accepted, rejected, reason)];
@@ -190,7 +191,7 @@ pub(super) async fn run(
         "invalid calendar date",
     )?;
     let draft = kept(
-        r.create_receipt(manager, COMPANY, &receipt(&order, "3.125e0", "225e-2"))
+        r.create_receipt(manager, COMPANY, &receipt(&order, "3.125e+0", "225e-2"))
             .await?,
     )?;
     check(
