@@ -8,7 +8,7 @@ Bilibi checkout; it does not build on its own.
 
 | Module | Descriptor ID | Crate | Owns |
 | --- | --- | --- | --- |
-| [`purchasing/`](purchasing/README.md) | `supply_chain/purchasing` | `bilibi-supply-chain-purchasing` | each company's suppliers and tax codes, its purchase requests with lines, approval and an audited status history, and (from the next slice) its purchase orders with amendments and receipts |
+| [`purchasing/`](purchasing/README.md) | `supply_chain/purchasing` | `bilibi-supply-chain-purchasing` | each company's suppliers and tax codes, its purchase requests with lines, approval and an audited status history, draft purchase orders raised from approved requests (the full order lifecycle with amendments and receipts follows), and the Suppliers and Purchase requests pages |
 
 Receiving (`supply_chain/receiving`, goods receipts against purchase orders)
 follows as a sibling module folder. Other Supply Chain modules read and write
@@ -40,10 +40,14 @@ Tenant Owner role holds every Purchasing capability.
 
 ## Pages
 
-- **Suppliers** (`/supply-chain/suppliers`): the company's suppliers and tax
-  codes, add forms and deactivation.
-- **Purchase requests** (`/supply-chain/purchase-requests`): status tabs, the
-  draft form, submit, decide and cancel.
+| Page | Path | Does |
+| --- | --- | --- |
+| Suppliers | `/supply-chain/suppliers` | the company's suppliers and tax codes in FlexTables, the add forms, Deactivate/Activate |
+| Purchase requests | `/supply-chain/purchase-requests` | status tabs, the five-line draft form, submit, approve or reject, cancel (each confirmed) and Create order |
+
+Purchase orders (`/supply-chain/purchase-orders`) is in the menu and comes
+with the order pages. Details are in
+[`purchasing/README.md`](purchasing/README.md#pages-and-menu).
 
 ## Walkthrough
 
@@ -52,13 +56,15 @@ crate: against a freshly created disposable database it migrates the composed
 app, installs the Platform walkthrough fixture (its tenants, accounts and
 companies), gives `manager@example.test` the Tenant Owner role, and through
 the Purchasing facade creates Company 001's first suppliers and tax codes,
-changes and deactivates them, and walks three purchase requests through
+changes and deactivates them, walks three purchase requests through
 draft, update, submit, approve, reject and cancel (the grant-all
-`admin@example.test` decides what the manager submitted). It prints the
-refusals beside the writes (a taken code, a broken rule, a missing grant, a
-request decided by its own submitter, a transition that no longer applies)
-and shows PostgreSQL refusing a change to an approved request, its lines or
-its history, and a transition without a history row.
+`admin@example.test` decides what the manager submitted), drafts two orders
+from the approved request, and has the admin submit two more requests for
+the manager to decide in the browser. It prints the refusals beside the
+writes (a taken code, a broken rule, a missing grant, a request decided by
+its own submitter, a transition that no longer applies, an inactive
+supplier) and shows PostgreSQL refusing a change to an approved request,
+its lines or its history, and a transition without a history row.
 
 ```sh
 createdb -h 127.0.0.1 -p 5438 -U bilibi bilibi_sc_walkthrough
@@ -69,8 +75,14 @@ APP_ORIGIN=http://localhost:3000 cargo run -p bilibi-web -- run
 
 Sign in at <http://localhost:3000> as `manager@example.test` (password
 `bilibi-dev`): the sidebar shows the Supply chain menu with its three items.
-`viewer@example.test` holds no Purchasing capability and sees no Supply chain
-menu.
+On Suppliers, add a supplier or tax code, repeat a code (refused), and
+deactivate one. On Purchase requests, save a draft with lines, submit it
+(confirmed), try to approve it yourself (refused), approve Forklift service
+or reject Pallet wrap with a reason, draft an order from an approved
+request with an active supplier and a currency, and cancel one; switch the
+status tabs, sort a column and try the compact rows.
+`viewer@example.test` holds no Purchasing capability: no Supply chain menu,
+and both pages answer 403.
 
 ## Checks
 
