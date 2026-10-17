@@ -17,8 +17,11 @@ bilibi-database.workspace = true
 bilibi-domains.workspace = true
 bilibi-extensions.workspace = true
 bilibi-module-registry.workspace = true
+bilibi-ports.workspace = true
 bilibi-supply-chain-purchasing = { path = "../../purchasing" }
 bilibi-tenancy.workspace = true
+rust_decimal.workspace = true
+serde_json.workspace = true
 bilibi-walkthrough-fixture = { path = "../../../../../fixtures/walkthrough" }
 tokio.workspace = true
 tokio-postgres.workspace = true
