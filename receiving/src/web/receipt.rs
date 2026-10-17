@@ -227,10 +227,11 @@ impl ReceiptPage {
                     self.pending.as_ref().map(|p| p.action)
                 };
                 // A confirm with nothing pending does nothing; an unknown
-                // action is refused like one the scope may not take.
+                // action is refused like one the scope may not take. A
+                // refusal keeps the held action, so the dialog stays open
+                // beside the flash, as Bilimbi's.
                 let permitted = action.is_some_and(|a| a.permitted(self.can_manage, self.can_post));
                 if !permitted && (kind == "transition" || action.is_some()) {
-                    self.pending = None;
                     self.flash.error(DENIED);
                     return Ok(true);
                 }

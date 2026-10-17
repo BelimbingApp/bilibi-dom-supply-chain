@@ -11,13 +11,15 @@ use bilibi_tenancy::Scope;
 use bilibi_ui::{
     list_state::ParamNames,
     page::{LiveBody, LiveFuture, LiveInput, LiveRequest, LiveState},
-    params, Button, ButtonVariant, ColumnsOutcome, ConfirmDialog, EmptyState, Fact, Facts, Field,
-    FlashMap, FlexRow, Html, InputKind, ListColumns, ListSpec, ListState, RowMode, SortDir,
+    params, BackLink, Button, ButtonVariant, ColumnsOutcome, ConfirmDialog, EmptyState, Fact,
+    Facts, Field, FlashMap, FlexRow, Html, InputKind, ListColumns, ListSpec, ListState, RowMode,
+    SortDir,
 };
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc, time::SystemTime};
 
 const DENIED: &str = "You do not have permission to change purchase orders.";
+const ORDERS_PATH: &str = "/supply-chain/purchase-orders";
 #[derive(Clone, Copy)]
 enum Action {
     Submit,
@@ -121,6 +123,7 @@ impl Grid {
 struct View<'a> {
     flash: FlashMap<'a>,
     order: Option<&'a Order>,
+    back: Html,
     status_line: Html,
     facts: Html,
     lines: Html,
@@ -300,20 +303,22 @@ impl OrderPage {
                 } else {
                     self.pending.as_ref().map(|p| p.action)
                 };
-                if let Some(action) = action {
-                    if !action.permitted(self.can_manage, self.can_approve) {
-                        self.pending = None;
-                        self.flash.error(DENIED);
-                        return Ok(true);
-                    }
+                // An unknown action is not permitted, as Bilimbi's `permitted?/3`.
+                let Some(action) = action else {
                     if text(payload, "type") == "transition" {
-                        self.pending = Some(Pending {
-                            action,
-                            reason: text(payload, "reason").chars().take(4096).collect(),
-                        });
-                    } else if let Some(pending) = self.pending.take() {
-                        self.run(scope, pending).await?;
+                        self.flash.error(DENIED);
                     }
+                    return Ok(true);
+                };
+                if !action.permitted(self.can_manage, self.can_approve) {
+                    self.flash.error(DENIED);
+                } else if text(payload, "type") == "transition" {
+                    self.pending = Some(Pending {
+                        action,
+                        reason: text(payload, "reason").chars().take(4096).collect(),
+                    });
+                } else if let Some(pending) = self.pending.take() {
+                    self.run(scope, pending).await?;
                 }
                 return Ok(true);
             }
@@ -472,6 +477,11 @@ impl OrderPage {
         let mut view = View {
             flash: self.flash.map(),
             order: self.order.as_ref(),
+            back: render(&BackLink {
+                href: ORDERS_PATH,
+                title: "Back to purchase orders",
+                ..BackLink::default()
+            })?,
             status_line: Html::EMPTY,
             facts: Html::EMPTY,
             lines: Html::EMPTY,
@@ -484,7 +494,12 @@ impl OrderPage {
                     "This purchase order is not available.",
                     "It may belong to another company, or the link is out of date.",
                 )
-                .id("order-missing"),
+                .id("order-missing")
+                .action(render(&Button {
+                    href: ORDERS_PATH,
+                    body: Html::text("Back to purchase orders"),
+                    ..Button::default()
+                })?),
             )?,
         };
         if let Some(o) = &self.order {

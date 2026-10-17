@@ -154,17 +154,18 @@ pub(crate) fn lines(
     if inputs.is_empty() {
         return Err(Refusal::NoLines);
     }
-    let mut checks = Checks::default();
+    // Bilimbi refuses a repeated order line on its own, before any line rule.
     let mut seen = HashSet::new();
+    if !inputs.iter().all(|input| seen.insert(input.order_line_id)) {
+        return Err(Refusal::Invalid(vec![FieldError::new(
+            "lines",
+            "names each order line once",
+        )]));
+    }
+    let mut checks = Checks::default();
     let mut valid = Vec::new();
     for (i, input) in inputs.iter().enumerate() {
         let line_number = i + 1;
-        if !seen.insert(input.order_line_id) {
-            checks.take(Err::<(), _>(FieldError::new(
-                "lines",
-                "names each order line once",
-            )));
-        }
         let Some(line) = order.lines.iter().find(|l| l.id == input.order_line_id) else {
             checks.line(
                 line_number,
@@ -175,6 +176,7 @@ pub(crate) fn lines(
             );
             continue;
         };
+        let before = checks.0.len();
         let received = checks.line(
             line_number,
             number("received_quantity", &input.received_quantity, true),
@@ -187,43 +189,35 @@ pub(crate) fn lines(
             line_number,
             text("rejection_reason", &input.rejection_reason, 500, false),
         );
-        if received + rejected <= Decimal::ZERO {
-            checks.line(
-                line_number,
-                Err::<(), _>(FieldError::new(
+        // The quantity rules and then the tolerance apply only to an
+        // otherwise valid line, and only the first that fails is reported,
+        // as Bilimbi's `validate_quantities/1` and `within_tolerance/3`.
+        if checks.0.len() == before {
+            let ceiling = line.quantity * (Decimal::ONE_HUNDRED + tolerance) / Decimal::ONE_HUNDRED;
+            let refusal = if received + rejected <= Decimal::ZERO {
+                Some((
                     "received_quantity",
                     "or the rejected quantity must be greater than 0",
-                )),
-            );
-        }
-        if rejected > Decimal::ZERO && rejection_reason.is_none() {
-            checks.line(
-                line_number,
-                Err::<(), _>(FieldError::new(
-                    "rejection_reason",
-                    "can't be blank when goods are rejected",
-                )),
-            );
-        } else if rejected == Decimal::ZERO && rejection_reason.is_some() {
-            checks.line(
-                line_number,
-                Err::<(), _>(FieldError::new(
-                    "rejection_reason",
-                    "applies only to rejected goods",
-                )),
-            );
-        }
-        let ceiling = line.quantity * (Decimal::ONE_HUNDRED + tolerance) / Decimal::ONE_HUNDRED;
-        if line.received_quantity + received > ceiling {
-            let message = if tolerance == Decimal::ZERO {
-                "exceeds what the order line has left to receive"
+                ))
+            } else if rejected > Decimal::ZERO && rejection_reason.is_none() {
+                Some(("rejection_reason", "can't be blank when goods are rejected"))
+            } else if rejected == Decimal::ZERO && rejection_reason.is_some() {
+                Some(("rejection_reason", "applies only to rejected goods"))
+            } else if line.received_quantity + received > ceiling {
+                Some((
+                    "received_quantity",
+                    if tolerance == Decimal::ZERO {
+                        "exceeds what the order line has left to receive"
+                    } else {
+                        "exceeds what the order line has left to receive, beyond the tolerance"
+                    },
+                ))
             } else {
-                "exceeds what the order line has left to receive, beyond the tolerance"
+                None
             };
-            checks.line(
-                line_number,
-                Err::<(), _>(FieldError::new("received_quantity", message)),
-            );
+            if let Some((field, message)) = refusal {
+                checks.line(line_number, Err::<(), _>(FieldError::new(field, message)));
+            }
         }
         valid.push(ReceiptLine {
             id: 0,

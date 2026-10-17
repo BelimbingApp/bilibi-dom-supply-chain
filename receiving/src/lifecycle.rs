@@ -30,9 +30,11 @@ pub(crate) async fn configure(
         let id = row.try_get(0)?;
         Ok(((), vec![change("setting", id, json!({}), json!({"id":id,"over_receipt_tolerance_percent":percent.to_string(),"set_by_user_id":scope.user(),"set_by_impersonator_id":scope.impersonator().map(|i| i.user())}))]))
     })).await?;
-    Ok(Outcome::Saved(
-        records::settings(tx.sql(), tx.context().tenant, company).await?,
-    ))
+    // Bilimbi answers with the inserted row, so the value keeps the scale it
+    // was entered with ("5", not the column's "5.0000") until the next read.
+    let mut settings = records::settings(tx.sql(), tx.context().tenant, company).await?;
+    settings.over_receipt_tolerance_percent = percent;
+    Ok(Outcome::Saved(settings))
 }
 
 async fn order(
