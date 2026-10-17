@@ -38,6 +38,13 @@ After migrating, the Supply chain menu offers Purchase requests, Purchase
 orders and Suppliers to accounts holding `supply-chain.purchasing.view`; the
 Tenant Owner role holds every Purchasing capability.
 
+## Pages
+
+- **Suppliers** (`/supply-chain/suppliers`): the company's suppliers and tax
+  codes, add forms and deactivation.
+- **Purchase requests** (`/supply-chain/purchase-requests`): status tabs, the
+  draft form, submit, decide and cancel.
+
 ## Walkthrough
 
 Proofs never use a seeded database. `fixtures/walkthrough` is an example-only
