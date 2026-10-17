@@ -62,7 +62,7 @@ struct View<'a> {
     flash: FlashMap<'a>,
     receipt: Option<&'a Receipt>,
     back: Html,
-    subtitle: Html,
+    status_line: Html,
     facts: Html,
     lines: Html,
     actions: Html,
@@ -508,7 +508,7 @@ impl ReceiptPage {
                 title: "Back to goods receipts",
                 ..BackLink::default()
             })?,
-            subtitle: Html::EMPTY,
+            status_line: Html::EMPTY,
             facts: Html::EMPTY,
             lines: Html::EMPTY,
             actions: Html::EMPTY,
@@ -530,7 +530,7 @@ impl ReceiptPage {
         let Some(r) = &self.receipt else {
             return view.render().map_err(|_| Error::Internal);
         };
-        view.subtitle = render(&Subtitle {
+        view.status_line = render(&Subtitle {
             badge: badge(r.status)?,
             kind: label(r.kind.as_str()),
             order_number: r.order_number,

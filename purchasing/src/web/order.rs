@@ -121,7 +121,7 @@ impl Grid {
 struct View<'a> {
     flash: FlashMap<'a>,
     order: Option<&'a Order>,
-    subtitle: Html,
+    status_line: Html,
     facts: Html,
     lines: Html,
     actions: Html,
@@ -472,7 +472,7 @@ impl OrderPage {
         let mut view = View {
             flash: self.flash.map(),
             order: self.order.as_ref(),
-            subtitle: Html::EMPTY,
+            status_line: Html::EMPTY,
             facts: Html::EMPTY,
             lines: Html::EMPTY,
             actions: Html::EMPTY,
@@ -488,7 +488,7 @@ impl OrderPage {
             )?,
         };
         if let Some(o) = &self.order {
-            view.subtitle = render(&Subtitle {
+            view.status_line = render(&Subtitle {
                 badge: badge(o.status)?,
                 supplier: supplier(o),
                 currency: &o.currency_code,
