@@ -114,7 +114,11 @@ impl Purchasing {
                     .map_err(|_| bilibi_database::Error::Invalid)?,
                 MANAGE_ORDERS,
             )
-            .await?;
+            .await
+            .map_err(|error| match error {
+                bilibi_database::Error::NotFound => Error::NotFound,
+                other => other.into(),
+            })?;
         // Platform need: require_writable currently accepts only GenericClient,
         // not OperationClient. Keep this narrow lock on the plan's transaction;
         // commit still uses the normal Company guard in amend_order_in.
