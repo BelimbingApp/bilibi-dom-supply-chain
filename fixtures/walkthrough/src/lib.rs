@@ -6,10 +6,13 @@
 //! and creates Company 001's first suppliers and tax codes, changes and
 //! deactivates them, and walks purchase requests through their lifecycle
 //! (draft, update, submit, approve, reject, cancel) through the Purchasing
-//! facade, showing the refusals beside the writes and the database refusing
-//! a change to a submitted request or its history. A
-//! `bilibi-web run` against the same database then shows the Supply chain
-//! menu to `manager@example.test` and withholds it from `viewer@example.test`.
+//! facade, drafts orders from the approved request, showing the refusals
+//! beside the writes and the database refusing a change to a submitted
+//! request or its history, and leaves two requests the grant-all admin
+//! submitted for the manager to decide. A `bilibi-web run` against the same
+//! database then shows the Supply chain menu and its Suppliers and Purchase
+//! requests pages to `manager@example.test` and withholds them from
+//! `viewer@example.test`.
 //!
 //! Never a product dependency, and never run against a real install: the
 //! Platform fixture refuses a database that already holds other accounts.
@@ -20,8 +23,9 @@ use bilibi_authz::{
 use bilibi_database::{pool, Error, Result};
 use bilibi_module_registry::{verify_composition, Services};
 use bilibi_supply_chain_purchasing::{
-    NewRequest, NewRequestLine, NewSupplier, NewTaxCode, Outcome, Purchasing, Request,
-    RequestChanges, RequestQuery, Supplier, SupplierChanges, TaxCode, TaxCodeChanges, SERVICE,
+    NewOrderFromRequest, NewRequest, NewRequestLine, NewSupplier, NewTaxCode, Outcome, Purchasing,
+    Request, RequestChanges, RequestQuery, Supplier, SupplierChanges, TaxCode, TaxCodeChanges,
+    SERVICE,
 };
 use bilibi_tenancy::{Authentication, Scope};
 use std::{fmt::Debug, sync::Arc};
@@ -554,6 +558,104 @@ pub async fn run(url: &str) -> Result<()> {
             .await,
     );
 
+    // An approved request becomes a draft order with an active supplier;
+    // the request stays approved and may be ordered again.
+    let suppliers_now = purchasing.list_suppliers(&manager, COMPANY, false).await?;
+    let supplier_id = |code: &str| {
+        suppliers_now
+            .iter()
+            .find(|supplier| supplier.code == code)
+            .map(|supplier| supplier.id.to_string())
+            .unwrap_or_default()
+    };
+    let order = |supplier: &str, currency: &str| NewOrderFromRequest {
+        supplier_id: supplier_id(supplier),
+        currency_code: currency.into(),
+    };
+    for (step, actor, request, input) in [
+        (
+            "viewer orders the approved request",
+            &viewer,
+            brackets.id,
+            order("KEDAI-BESI", "MYR"),
+        ),
+        (
+            "manager orders the rejected request",
+            &manager,
+            empty.id,
+            order("KEDAI-BESI", "MYR"),
+        ),
+        (
+            "manager orders the approved request from no supplier in ringgit",
+            &manager,
+            brackets.id,
+            NewOrderFromRequest {
+                supplier_id: String::new(),
+                currency_code: "ringgit".into(),
+            },
+        ),
+        (
+            "manager orders the approved request from inactive PACK-CO",
+            &manager,
+            brackets.id,
+            order("PACK-CO", "MYR"),
+        ),
+        (
+            "manager orders the approved request from KEDAI-BESI in myr",
+            &manager,
+            brackets.id,
+            order("KEDAI-BESI", "myr"),
+        ),
+        (
+            "manager orders it again, a split order",
+            &manager,
+            brackets.id,
+            order("KEDAI-BESI", "MYR"),
+        ),
+    ] {
+        show(
+            step,
+            purchasing
+                .create_order_from_request(actor, COMPANY, request, &input)
+                .await,
+        );
+    }
+
+    // Requests someone other than the manager submitted, left for the
+    // manager to decide on the Purchase requests page.
+    for (title, lines) in [
+        (
+            "Forklift service",
+            vec![line("Forklift annual service", "1", "visit")],
+        ),
+        (
+            "Pallet wrap",
+            vec![
+                line("Stretch film 500 mm", "24", "roll"),
+                line("Corner boards", "200", "pcs"),
+            ],
+        ),
+    ] {
+        let request = saved(show(
+            &format!("admin drafts {title}"),
+            purchasing
+                .create_request(
+                    &admin,
+                    COMPANY,
+                    &NewRequest {
+                        title: title.into(),
+                        lines,
+                        ..NewRequest::default()
+                    },
+                )
+                .await,
+        ))?;
+        show(
+            &format!("admin submits {title}"),
+            purchasing.submit_request(&admin, COMPANY, request.id).await,
+        );
+    }
+
     // PostgreSQL itself refuses what the facade never attempts: a change to
     // a submitted request's header, and any change to its history.
     for (step, sql) in [
@@ -616,7 +718,7 @@ pub async fn run(url: &str) -> Result<()> {
     println!("company {COMPANY}'s tax codes:");
     print_tax_codes(&purchasing.list_tax_codes(&manager, COMPANY, false).await?);
     println!(
-        "Run bilibi-web against this database and sign in as manager@example.test (password {}): the Supply chain menu offers Purchase requests, Purchase orders and Suppliers. viewer@example.test sees no Supply chain menu.",
+        "Run bilibi-web against this database and sign in as manager@example.test (password {}): the Supply chain menu offers Purchase requests, Purchase orders and Suppliers, and the Purchase requests page leaves Forklift service and Pallet wrap for the manager to decide. viewer@example.test sees no Supply chain menu.",
         bilibi_walkthrough_fixture::PASSWORD
     );
     Ok(())
