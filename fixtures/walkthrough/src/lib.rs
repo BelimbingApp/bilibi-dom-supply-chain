@@ -11,9 +11,11 @@
 //! order, and reads an order line through the
 //! `supply_chain/purchasing.order_line` port. It shows the refusals beside
 //! the writes and the database refusing a change to a submitted request, a
-//! closed order, their lines or their history. A `bilibi-web run` against the
-//! same database then shows the Supply chain menu to `manager@example.test`
-//! and withholds it from `viewer@example.test`.
+//! closed order, their lines or their history, and leaves two requests the
+//! grant-all admin submitted for the manager to decide. A `bilibi-web run`
+//! against the same database then shows the Supply chain menu and its
+//! Suppliers and Purchase requests pages to `manager@example.test` and
+//! withholds them from `viewer@example.test`.
 //!
 //! Never a product dependency, and never run against a real install: the
 //! Platform fixture refuses a database that already holds other accounts.
@@ -1269,6 +1271,41 @@ pub async fn run(url: &str) -> Result<()> {
         print_order(order);
     }
 
+    // Requests someone other than the manager submitted, left for the
+    // manager to decide on the Purchase requests page.
+    for (title, lines) in [
+        (
+            "Forklift service",
+            vec![line("Forklift annual service", "1", "visit")],
+        ),
+        (
+            "Pallet wrap",
+            vec![
+                line("Stretch film 500 mm", "24", "roll"),
+                line("Corner boards", "200", "pcs"),
+            ],
+        ),
+    ] {
+        let request = saved(show(
+            &format!("admin drafts {title}"),
+            purchasing
+                .create_request(
+                    &admin,
+                    COMPANY,
+                    &NewRequest {
+                        title: title.into(),
+                        lines,
+                        ..NewRequest::default()
+                    },
+                )
+                .await,
+        ))?;
+        show(
+            &format!("admin submits {title}"),
+            purchasing.submit_request(&admin, COMPANY, request.id).await,
+        );
+    }
+
     // PostgreSQL itself refuses what the facade never attempts: a change to
     // a submitted request's header, and any change to its history.
     for (step, sql) in [
@@ -1322,7 +1359,7 @@ pub async fn run(url: &str) -> Result<()> {
     println!("company {COMPANY}'s tax codes:");
     print_tax_codes(&purchasing.list_tax_codes(&manager, COMPANY, false).await?);
     println!(
-        "Run bilibi-web against this database and sign in as manager@example.test (password {}): the Supply chain menu offers Purchase requests, Purchase orders and Suppliers. viewer@example.test sees no Supply chain menu.",
+        "Run bilibi-web against this database and sign in as manager@example.test (password {}): the Supply chain menu offers Purchase requests, Purchase orders and Suppliers, and the Purchase requests page leaves Forklift service and Pallet wrap for the manager to decide. viewer@example.test sees no Supply chain menu.",
         bilibi_walkthrough_fixture::PASSWORD
     );
     Ok(())

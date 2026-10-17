@@ -7,8 +7,13 @@ use crate::{Purchasing, MODULE, SERVICE};
 use bilibi_authz::{CapabilityDefinition as C, RoleDefinition, VocabularyContribution, VOCABULARY};
 use bilibi_database::{Db, MutationBoundary};
 use bilibi_menu::{MenuItem, Requirement};
-use bilibi_module_registry::{Contribution, Layer, Module, Provenance, Service};
+use bilibi_module_registry::{
+    contributions::{Access, Method, Route, ROUTES},
+    Contribution, Layer, Module, Provenance, Service,
+};
 use bilibi_ports::{Port, PORTS};
+use bilibi_tenancy::Scope;
+use bilibi_ui::page::PageService;
 use std::sync::Arc;
 
 // The Authz domain is "supply-chain": a capability segment may not carry an
@@ -52,7 +57,7 @@ inventory::submit! {
     Module {
         id: MODULE,
         layer: Layer::Domains,
-        dependencies: &["base/authz", "base/database", "base/menu", "base/ports", "base/tenancy", "core/company"],
+        dependencies: &["base/authz", "base/database", "base/menu", "base/ports", "base/tenancy", "base/ui", "core/company"],
         migrations: &[
             (
                 "supply-chain-purchasing-001-suppliers-tax-codes",
@@ -63,15 +68,30 @@ inventory::submit! {
                 include_str!("../migrations/002-requests-orders.sql"),
             ),
         ],
-        services: &[Service {
-            id: SERVICE,
-            factory: |services| {
-                Ok(Arc::new(Purchasing::new(
-                    services.get::<Db>("base/database.pool")?.as_ref().clone(),
-                    services.get::<MutationBoundary>("base/database.mutations")?,
-                )))
+        services: &[
+            Service {
+                id: SERVICE,
+                factory: |services| {
+                    Ok(Arc::new(Purchasing::new(
+                        services.get::<Db>("base/database.pool")?.as_ref().clone(),
+                        services.get::<MutationBoundary>("base/database.mutations")?,
+                    )))
+                },
             },
-        }],
+            Service {
+                id: PAGES,
+                factory: |services| {
+                    let db = services.get::<Db>("base/database.pool")?.as_ref().clone();
+                    let purchasing = Purchasing::new(
+                        db.clone(),
+                        services.get::<MutationBoundary>("base/database.mutations")?,
+                    );
+                    Ok(Arc::new(PageService::<Scope, bilibi_database::Error>(Arc::new(
+                        crate::web::Pages::new(db, purchasing),
+                    ))))
+                },
+            },
+        ],
     }
 }
 
@@ -102,6 +122,25 @@ inventory::submit! {
     Contribution::new(PORTS, ORDER_LINE, provenance!(), &Port { provider: &OrderLinePort })
 }
 
+/// The registry service ID of the module's pages.
+const PAGES: &str = "supply_chain/purchasing.pages";
+/// The page paths, Bilimbi's `priv/web_routes.exs` verbatim.
+pub(crate) const SUPPLIERS_PATH: &str = "/supply-chain/suppliers";
+pub(crate) const REQUESTS_PATH: &str = "/supply-chain/purchase-requests";
+
+inventory::submit! {
+    Contribution::new(ROUTES, "supply_chain/purchasing.suppliers", provenance!(), &Route {
+        method: Method::Get, path: SUPPLIERS_PATH, service: PAGES, operation: "suppliers",
+        access: Access::Capability(VIEW), framed: true,
+    })
+}
+inventory::submit! {
+    Contribution::new(ROUTES, "supply_chain/purchasing.requests", provenance!(), &Route {
+        method: Method::Get, path: REQUESTS_PATH, service: PAGES, operation: "requests",
+        access: Access::Capability(VIEW), framed: true,
+    })
+}
+
 // The Supply chain root stays hidden until an account may see a child.
 bilibi_menu::contribute!(
     "supply_chain/purchasing",
@@ -114,7 +153,7 @@ bilibi_menu::contribute!(
     MenuItem::page(
         "supply_chain.purchase_requests",
         "Purchase requests",
-        "/supply-chain/purchase-requests"
+        REQUESTS_PATH
     )
     .under("supply_chain")
     .requires(Requirement::Capability(VIEW))
@@ -133,12 +172,8 @@ bilibi_menu::contribute!(
 );
 bilibi_menu::contribute!(
     "supply_chain/purchasing",
-    MenuItem::page(
-        "supply_chain.suppliers",
-        "Suppliers",
-        "/supply-chain/suppliers"
-    )
-    .under("supply_chain")
-    .requires(Requirement::Capability(VIEW))
-    .order(30)
+    MenuItem::page("supply_chain.suppliers", "Suppliers", SUPPLIERS_PATH)
+        .under("supply_chain")
+        .requires(Requirement::Capability(VIEW))
+        .order(30)
 );

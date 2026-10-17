@@ -1,0 +1,4 @@
+# The pages compose the shared Base UI macros (components, forms, feedback,
+# dialog, tabs, flex table) from the mounted Platform checkout.
+[general]
+dirs = ["templates", "../../../base/ui/templates"]

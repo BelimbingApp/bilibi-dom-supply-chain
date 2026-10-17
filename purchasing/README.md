@@ -3,9 +3,9 @@
 Module ID: `supply_chain/purchasing`, crate `bilibi-supply-chain-purchasing`.
 A company's suppliers and tax codes, its purchase requests with lines,
 approval and an audited status history, and its purchase orders with
-approval, amendments and the goods received against them. Other Supply
-Chain modules read and write through
-this module's facade; none of them reads its tables. This README is the
+approval, amendments and the goods received against them, and the Suppliers
+and Purchase requests pages. Other Supply Chain modules read and write
+through this module's facade; none of them reads its tables. This README is the
 owner contract; the Bilimbi source it ports is
 [`purchasing/docs/README.md`](https://github.com/BelimbingApp/b-dom-supply-chain/blob/main/purchasing/docs/README.md).
 
@@ -251,7 +251,30 @@ The Supply chain menu (`supply_chain`, order 55) offers Purchase requests
 (`/supply-chain/purchase-requests`), Purchase orders
 (`/supply-chain/purchase-orders`) and Suppliers (`/supply-chain/suppliers`)
 to accounts holding `supply-chain.purchasing.view`; the root stays hidden
-from everyone else. Amendments have no page, as in Bilimbi. The pages
-themselves are later slices: each will read
-the capability again for every write-shaped event, and the facade checks the
-capability again when the event runs.
+from everyone else. Amendments have no page, as in Bilimbi. The module contributes the Suppliers and Purchase
+requests pages (service `supply_chain/purchasing.pages`, both behind
+`supply-chain.purchasing.view`); the purchase order pages are the next
+slice. Both pages work in the signed-in account's own company (its
+affiliation), read each write's capability again on every write-shaped
+event, and the facade checks it once more; a refusal or a lost grant is a
+flash with Bilimbi's sentence, never a cleared page.
+
+- **Suppliers** (Bilimbi `SuppliersLive`): the suppliers and tax codes, each
+  a FlexTable (column settings, row height and compact rows, sort on every
+  column in memory over the facade's bounded list; the tax codes' sort
+  query names carry a `tax_` prefix), the New supplier and New tax code
+  forms, and Deactivate/Activate per row, all under
+  `configuration.manage`. A toggle names its row and sets the opposite of
+  what that row showed.
+- **Purchase requests** (Bilimbi `RequestsLive`): the New purchase request
+  form (title, needed-by date, justification, five line rows; rows without
+  a description are ignored), status tabs (`?status=`, `all` by default),
+  the requests FlexTable newest number first, and per row Submit (draft),
+  Approve and Reject with a reason (submitted), Create order with a
+  supplier and currency (approved) and Cancel with a reason (draft,
+  submitted, approved). Submit, Approve, Reject and Cancel wait for the
+  shared confirmation dialog, which acts on the action it holds. Approve
+  and Reject are two small forms, each with its reason field, because the
+  live transport posts a form without the button that submitted it.
+  Create order stays on the page with Bilimbi's flash until the order page
+  exists (`TODO(S4)`: navigate to `/supply-chain/purchase-orders/:id`).

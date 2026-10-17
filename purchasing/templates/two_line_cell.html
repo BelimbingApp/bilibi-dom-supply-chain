@@ -1,0 +1,4 @@
+{#- A list cell with a quieter second line, left out of a compact row by
+    the caller (a supplier's contact and email, a request's title and its
+    decision reason). -#}
+{{ first }}{% if let Some(second) = second %}<span class="block text-xs text-ink-muted">{{ second }}</span>{% endif %}

@@ -8,7 +8,7 @@ Bilibi checkout; it does not build on its own.
 
 | Module | Descriptor ID | Crate | Owns |
 | --- | --- | --- | --- |
-| [`purchasing/`](purchasing/README.md) | `supply_chain/purchasing` | `bilibi-supply-chain-purchasing` | each company's suppliers and tax codes, its purchase requests and its purchase orders with lines, approval, amendments, goods received and an audited status history; the `supply_chain/purchasing.order_line` port |
+| [`purchasing/`](purchasing/README.md) | `supply_chain/purchasing` | `bilibi-supply-chain-purchasing` | each company's suppliers and tax codes, its purchase requests and its purchase orders with lines, approval, amendments, goods received and an audited status history; the `supply_chain/purchasing.order_line` port; the Suppliers and Purchase requests pages |
 
 Receiving (`supply_chain/receiving`, goods receipts against purchase orders)
 follows as a sibling module folder. Other Supply Chain modules read and write
@@ -38,6 +38,17 @@ After migrating, the Supply chain menu offers Purchase requests, Purchase
 orders and Suppliers to accounts holding `supply-chain.purchasing.view`; the
 Tenant Owner role holds every Purchasing capability.
 
+## Pages
+
+| Page | Path | Does |
+| --- | --- | --- |
+| Suppliers | `/supply-chain/suppliers` | the company's suppliers and tax codes in FlexTables, the add forms, Deactivate/Activate |
+| Purchase requests | `/supply-chain/purchase-requests` | status tabs, the five-line draft form, submit, approve or reject, cancel (each confirmed) and Create order |
+
+Purchase orders (`/supply-chain/purchase-orders`) is in the menu and comes
+with the order pages. Details are in
+[`purchasing/README.md`](purchasing/README.md#pages-and-menu).
+
 ## Walkthrough
 
 Proofs never use a seeded database. `fixtures/walkthrough` is an example-only
@@ -55,7 +66,8 @@ refusals beside the writes (a taken code, a broken rule, a missing grant, a
 request or order decided by its own submitter, an inactive supplier, an
 over-receipt, a transition that no longer applies) and shows PostgreSQL
 refusing a change to an approved request, a closed order, their lines or
-their history, and a transition without a history row.
+their history, and a transition without a history row. It also has the
+admin submit two more requests for the manager to decide in the browser.
 
 ```sh
 createdb -h 127.0.0.1 -p 5438 -U bilibi bilibi_sc_walkthrough
@@ -66,8 +78,14 @@ APP_ORIGIN=http://localhost:3000 cargo run -p bilibi-web -- run
 
 Sign in at <http://localhost:3000> as `manager@example.test` (password
 `bilibi-dev`): the sidebar shows the Supply chain menu with its three items.
-`viewer@example.test` holds no Purchasing capability and sees no Supply chain
-menu.
+On Suppliers, add a supplier or tax code, repeat a code (refused), and
+deactivate one. On Purchase requests, save a draft with lines, submit it
+(confirmed), try to approve it yourself (refused), approve Forklift service
+or reject Pallet wrap with a reason, draft an order from an approved
+request with an active supplier and a currency, and cancel one; switch the
+status tabs, sort a column and try the compact rows.
+`viewer@example.test` holds no Purchasing capability: no Supply chain menu,
+and both pages answer 403.
 
 ## Checks
 

@@ -1,6 +1,7 @@
 //! Purchasing (`supply_chain/purchasing`): a company's suppliers and tax
 //! codes, its purchase requests, and its purchase orders with their
-//! amendments and the goods received against them.
+//! amendments and the goods received against them, and the Suppliers and
+//! Purchase requests pages.
 //!
 //! This is the module's one facade. Other modules read and write through
 //! [`Purchasing`], resolved from the registry as [`SERVICE`]; the schema, SQL
@@ -24,6 +25,7 @@ mod requests;
 mod suppliers;
 mod tax_codes;
 mod validate;
+mod web;
 
 pub use contributions::{
     APPROVE_ORDERS, APPROVE_REQUESTS, CAPABILITIES, CONFIGURE, MANAGE_ORDERS, MANAGE_REQUESTS,

@@ -1,0 +1,19 @@
+{#- One request's row actions (Bilimbi `RequestsLive` `request-actions-<id>`):
+    submit a draft, approve or reject a submitted request with a reason,
+    draft an order from an approved one, cancel an open one. Each form posts
+    its own event; src/web/requests.rs decides which appear. -#}
+{%- import "components.html" as ui -%}
+{%- import "forms.html" as forms -%}
+<div id="request-actions-{{ id }}" class="flex flex-wrap gap-2">
+{{- submit -}}
+{%- if !approve.is_empty() -%}
+<form id="decide-{{ id }}" data-event="decide" class="flex items-center gap-1">{% for field in approve %}{% call forms::input(field=field) %}{% endcall %}{% endfor %}{% call ui::button(button_type="submit", class="whitespace-nowrap") %}Approve{% endcall %}</form>
+<form id="reject-{{ id }}" data-event="decide" class="flex items-center gap-1">{% for field in reject %}{% call forms::input(field=field) %}{% endcall %}{% endfor %}{% call ui::button(button_type="submit", class="whitespace-nowrap") %}Reject{% endcall %}</form>
+{%- endif -%}
+{%- if !order.is_empty() -%}
+<form id="order-from-{{ id }}" data-event="create_order" class="flex items-center gap-1">{% for field in order %}{% call forms::input(field=field) %}{% endcall %}{% endfor %}{% call ui::button(button_type="submit", class="whitespace-nowrap") %}Create order{% endcall %}</form>
+{%- endif -%}
+{%- if !cancel.is_empty() -%}
+<form id="cancel-{{ id }}" data-event="cancel" class="flex items-center gap-1">{% for field in cancel %}{% call forms::input(field=field) %}{% endcall %}{% endfor %}{% call ui::button(button_type="submit", class="whitespace-nowrap") %}Cancel{% endcall %}</form>
+{%- endif -%}
+</div>
