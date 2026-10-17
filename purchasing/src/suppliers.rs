@@ -3,7 +3,7 @@
 //! country ISO code, first-level division code) so a later move to a shared
 //! party record is a copy, not a translation. Private to the facade.
 use crate::validate::{country_iso, email, optional_text, required_text, Checks, TAKEN};
-use crate::{FieldError, NewSupplier, Outcome, Supplier};
+use crate::{FieldError, NewSupplier, Outcome, Refusal, Supplier, SupplierChanges};
 use bilibi_database::{Change, MutationTransaction, Result};
 use serde_json::{json, Value};
 use tokio_postgres::{GenericClient, Row};
@@ -59,6 +59,23 @@ pub(crate) async fn list(
         .iter()
         .map(from_row)
         .collect()
+}
+
+pub(crate) async fn get(
+    client: &impl GenericClient,
+    tenant: i64,
+    company_id: i64,
+    supplier_id: i64,
+) -> Result<Option<Supplier>> {
+    client
+        .query_opt(
+            &format!("SELECT {COLUMNS} FROM supply_chain_purchasing_suppliers WHERE tenant_id=$1 AND company_id=$2 AND id=$3"),
+            &[&tenant, &company_id, &supplier_id],
+        )
+        .await?
+        .as_ref()
+        .map(from_row)
+        .transpose()
 }
 
 /// A supplier as `create_changeset/2` accepts it.
@@ -117,10 +134,12 @@ pub(crate) async fn create(
 ) -> Result<Outcome<Supplier>> {
     let valid = match validate(input) {
         Ok(valid) => valid,
-        Err(errors) => return Ok(Outcome::Refused(errors)),
+        Err(errors) => return Ok(Outcome::Refused(Refusal::Invalid(errors))),
     };
     if code_taken(tx.sql(), company_id, &valid.code).await? {
-        return Ok(Outcome::Refused(vec![FieldError::new("code", TAKEN)]));
+        return Ok(Outcome::Refused(Refusal::Invalid(vec![FieldError::new(
+            "code", TAKEN,
+        )])));
     }
     let active = input.active;
     let created = tx
@@ -144,7 +163,7 @@ pub(crate) async fn create(
                 let change = Change {
                     kind: "supply_chain.purchasing.supplier".into(),
                     id: created.id,
-                    old: Value::Null,
+                    old: json!({}),
                     new: to_json(&created),
                 };
                 Ok((created, vec![change]))
@@ -152,4 +171,128 @@ pub(crate) async fn create(
         })
         .await?;
     Ok(Outcome::Saved(created))
+}
+
+/// `update_changeset/2`: the given fields over the stored ones, checked by
+/// the same rules as a new supplier's details.
+fn apply(
+    current: &Supplier,
+    changes: &SupplierChanges,
+) -> std::result::Result<Supplier, Vec<FieldError>> {
+    let mut checks = Checks::default();
+    let mut next = current.clone();
+    let optional =
+        |checks: &mut Checks, field, value: &Option<String>, max, into: &mut Option<String>| {
+            if let Some(value) = value {
+                *into = checks.take(optional_text(field, value, max));
+            }
+        };
+    if let Some(name) = &changes.name {
+        next.name = checks.take(required_text("name", name, 200));
+    }
+    optional(
+        &mut checks,
+        "contact_name",
+        &changes.contact_name,
+        200,
+        &mut next.contact_name,
+    );
+    if let Some(value) = &changes.email {
+        next.email = checks.take(email("email", value, 255));
+    }
+    optional(&mut checks, "phone", &changes.phone, 50, &mut next.phone);
+    optional(
+        &mut checks,
+        "address_line1",
+        &changes.address_line1,
+        255,
+        &mut next.address_line1,
+    );
+    optional(
+        &mut checks,
+        "address_line2",
+        &changes.address_line2,
+        255,
+        &mut next.address_line2,
+    );
+    optional(
+        &mut checks,
+        "address_line3",
+        &changes.address_line3,
+        255,
+        &mut next.address_line3,
+    );
+    optional(
+        &mut checks,
+        "locality",
+        &changes.locality,
+        120,
+        &mut next.locality,
+    );
+    optional(
+        &mut checks,
+        "postcode",
+        &changes.postcode,
+        20,
+        &mut next.postcode,
+    );
+    if let Some(value) = &changes.country_iso {
+        next.country_iso = checks.take(country_iso("country_iso", value));
+    }
+    optional(
+        &mut checks,
+        "admin1_code",
+        &changes.admin1_code,
+        20,
+        &mut next.admin1_code,
+    );
+    if let Some(active) = changes.active {
+        next.active = active;
+    }
+    checks.finish().map(|()| next)
+}
+
+pub(crate) async fn update(
+    tx: &mut MutationTransaction<'_>,
+    tenant: i64,
+    company_id: i64,
+    supplier_id: i64,
+    changes: &SupplierChanges,
+) -> Result<Outcome<Supplier>> {
+    let Some(current) = get(tx.sql(), tenant, company_id, supplier_id).await? else {
+        return Ok(Outcome::Refused(Refusal::SupplierNotFound));
+    };
+    let next = match apply(&current, changes) {
+        Ok(next) => next,
+        Err(errors) => return Ok(Outcome::Refused(Refusal::Invalid(errors))),
+    };
+    let updated = tx
+        .mutate(move |sql| {
+            Box::pin(async move {
+                let row = sql
+                    .query_one(
+                        &format!(
+                            "UPDATE supply_chain_purchasing_suppliers SET name=$3,contact_name=$4,email=$5,phone=$6,address_line1=$7,address_line2=$8,address_line3=$9,locality=$10,postcode=$11,country_iso=$12,admin1_code=$13,active=$14,updated_at=now() AT TIME ZONE 'UTC' \
+                             WHERE company_id=$1 AND id=$2 RETURNING {COLUMNS}"
+                        ),
+                        &[
+                            &company_id, &current.id, &next.name, &next.contact_name, &next.email,
+                            &next.phone, &next.address_line1, &next.address_line2, &next.address_line3,
+                            &next.locality, &next.postcode, &next.country_iso, &next.admin1_code,
+                            &next.active,
+                        ],
+                    )
+                    .await?;
+                let updated = from_row(&row)?;
+                let change = Change {
+                    kind: "supply_chain.purchasing.supplier".into(),
+                    id: updated.id,
+                    old: to_json(&current),
+                    new: to_json(&updated),
+                };
+                Ok((updated, vec![change]))
+            })
+        })
+        .await?;
+    Ok(Outcome::Saved(updated))
 }

@@ -3,8 +3,11 @@
 //! disposable database it migrates the composed app, installs the Platform
 //! walkthrough fixture (its tenants, accounts and companies), gives the
 //! manager the Tenant Owner role that carries every Purchasing capability,
-//! and creates Company 001's first suppliers and tax codes through the
-//! Purchasing facade, showing the refusals beside the writes. A
+//! and creates Company 001's first suppliers and tax codes, changes and
+//! deactivates them, and walks purchase requests through their lifecycle
+//! (draft, update, submit, approve, reject, cancel) through the Purchasing
+//! facade, showing the refusals beside the writes and the database refusing
+//! a change to a submitted request or its history. A
 //! `bilibi-web run` against the same database then shows the Supply chain
 //! menu to `manager@example.test` and withholds it from `viewer@example.test`.
 //!
@@ -17,7 +20,8 @@ use bilibi_authz::{
 use bilibi_database::{pool, Error, Result};
 use bilibi_module_registry::{verify_composition, Services};
 use bilibi_supply_chain_purchasing::{
-    NewSupplier, NewTaxCode, Outcome, Purchasing, Supplier, TaxCode, SERVICE,
+    NewRequest, NewRequestLine, NewSupplier, NewTaxCode, Outcome, Purchasing, Request,
+    RequestChanges, RequestQuery, Supplier, SupplierChanges, TaxCode, TaxCodeChanges, SERVICE,
 };
 use bilibi_tenancy::{Authentication, Scope};
 use std::{fmt::Debug, sync::Arc};
@@ -72,18 +76,55 @@ fn tax_codes() -> [NewTaxCode; 2] {
     ]
 }
 
-fn show<T: Debug>(step: &str, result: Result<Outcome<T>>) {
+fn show<T: Debug>(step: &str, result: Result<Outcome<T>>) -> Option<T> {
     match result {
-        Ok(Outcome::Saved(record)) => println!("{step}: saved {record:?}"),
-        Ok(Outcome::Refused(errors)) => {
-            let errors: Vec<_> = errors
-                .iter()
-                .map(|error| format!("{} {}", error.field, error.message))
-                .collect();
-            println!("{step}: refused ({})", errors.join("; "))
+        Ok(Outcome::Saved(record)) => {
+            println!("{step}: saved {record:?}");
+            Some(record)
         }
-        Ok(Outcome::CompanyArchived) => println!("{step}: refused (company archived)"),
-        Err(error) => println!("{step}: {error}"),
+        Ok(Outcome::Refused(refusal)) => {
+            println!("{step}: refused ({})", refusal.text());
+            None
+        }
+        Ok(Outcome::CompanyArchived) => {
+            println!("{step}: refused (company archived)");
+            None
+        }
+        Err(error) => {
+            println!("{step}: {error}");
+            None
+        }
+    }
+}
+
+fn line(description: &str, quantity: &str, unit: &str) -> NewRequestLine {
+    NewRequestLine {
+        description: description.into(),
+        quantity: quantity.into(),
+        unit: unit.into(),
+        ..NewRequestLine::default()
+    }
+}
+
+/// A request saved by a step the walkthrough cannot go on without.
+fn saved(request: Option<Request>) -> Result<Request> {
+    request.ok_or(Error::Internal)
+}
+
+fn print_requests(requests: &[Request]) {
+    for request in requests {
+        println!(
+            "  PR-{} {} [{}] {} line(s){}",
+            request.request_number,
+            request.title,
+            request.status.as_str(),
+            request.lines.len(),
+            request
+                .decision_reason
+                .as_deref()
+                .map(|reason| format!("; decision: {reason}"))
+                .unwrap_or_default()
+        );
     }
 }
 
@@ -261,6 +302,315 @@ pub async fn run(url: &str) -> Result<()> {
         Err(error) => println!("viewer lists company {COMPANY}'s suppliers: {error}"),
     }
 
+    // Details change and a supplier or tax code is deactivated, never deleted.
+    let suppliers_now = purchasing.list_suppliers(&manager, COMPANY, false).await?;
+    if let Some(pack) = suppliers_now.iter().find(|s| s.code == "PACK-CO") {
+        show(
+            "manager gives PACK-CO a contact and deactivates it",
+            purchasing
+                .update_supplier(
+                    &manager,
+                    COMPANY,
+                    pack.id,
+                    &SupplierChanges {
+                        contact_name: Some("Daniel Ong".into()),
+                        active: Some(false),
+                        ..SupplierChanges::default()
+                    },
+                )
+                .await,
+        );
+        show(
+            "manager blanks PACK-CO's name",
+            purchasing
+                .update_supplier(
+                    &manager,
+                    COMPANY,
+                    pack.id,
+                    &SupplierChanges {
+                        name: Some("  ".into()),
+                        ..SupplierChanges::default()
+                    },
+                )
+                .await,
+        );
+    }
+    show(
+        "manager changes a supplier that does not exist",
+        purchasing
+            .update_supplier(&manager, COMPANY, i64::MAX, &SupplierChanges::default())
+            .await,
+    );
+    let tax_codes_now = purchasing.list_tax_codes(&manager, COMPANY, false).await?;
+    if let Some(sst) = tax_codes_now.iter().find(|t| t.code == "SST-10") {
+        show(
+            "manager sets SST-10 to 8%",
+            purchasing
+                .update_tax_code(
+                    &manager,
+                    COMPANY,
+                    sst.id,
+                    &TaxCodeChanges {
+                        name: Some("Sales tax 8%".into()),
+                        rate: Some("8".into()),
+                        ..TaxCodeChanges::default()
+                    },
+                )
+                .await,
+        );
+    }
+    if let Some(exempt) = tax_codes_now.iter().find(|t| t.code == "EXEMPT") {
+        show(
+            "manager sets EXEMPT to 101%",
+            purchasing
+                .update_tax_code(
+                    &manager,
+                    COMPANY,
+                    exempt.id,
+                    &TaxCodeChanges {
+                        rate: Some("101".into()),
+                        ..TaxCodeChanges::default()
+                    },
+                )
+                .await,
+        );
+    }
+
+    // The request lifecycle. The manager drafts, corrects and submits; the
+    // admin, someone else, decides.
+    show(
+        "manager drafts a request with no title and a bad line",
+        purchasing
+            .create_request(
+                &manager,
+                COMPANY,
+                &NewRequest {
+                    needed_on: "2026-02-30".into(),
+                    lines: vec![line("Steel bracket", "0", "pcs"), line("", "1.23456", "")],
+                    ..NewRequest::default()
+                },
+            )
+            .await,
+    );
+    let brackets = saved(show(
+        "manager drafts a request for brackets",
+        purchasing
+            .create_request(
+                &manager,
+                COMPANY,
+                &NewRequest {
+                    title: "Brackets for line 2".into(),
+                    justification: "The line 2 rebuild needs new mounts.".into(),
+                    needed_on: "2026-11-30".into(),
+                    lines: vec![line("Steel bracket 40 mm", "200", "pcs")],
+                },
+            )
+            .await,
+    ))?;
+    show(
+        "manager adds a second line to the draft",
+        purchasing
+            .update_request(
+                &manager,
+                COMPANY,
+                brackets.id,
+                &RequestChanges {
+                    lines: Some(vec![
+                        line("Steel bracket 40 mm", "200", "pcs"),
+                        NewRequestLine {
+                            external_item_ref: "M8-BOLT".into(),
+                            ..line("M8 bolt", "400.5", "pcs")
+                        },
+                    ]),
+                    ..RequestChanges::default()
+                },
+            )
+            .await,
+    );
+    show(
+        "manager submits it",
+        purchasing
+            .submit_request(&manager, COMPANY, brackets.id)
+            .await,
+    );
+    show(
+        "manager changes the submitted request's title",
+        purchasing
+            .update_request(
+                &manager,
+                COMPANY,
+                brackets.id,
+                &RequestChanges {
+                    title: Some("Something else".into()),
+                    ..RequestChanges::default()
+                },
+            )
+            .await,
+    );
+    show(
+        "manager approves the request they submitted",
+        purchasing
+            .approve_request(&manager, COMPANY, brackets.id, "")
+            .await,
+    );
+    show(
+        "viewer approves it",
+        purchasing
+            .approve_request(&viewer, COMPANY, brackets.id, "")
+            .await,
+    );
+    show(
+        "admin approves it",
+        purchasing
+            .approve_request(&admin, COMPANY, brackets.id, "Budgeted for Q4")
+            .await,
+    );
+
+    let empty = saved(show(
+        "manager drafts a request with no lines",
+        purchasing
+            .create_request(
+                &manager,
+                COMPANY,
+                &NewRequest {
+                    title: "Packaging".into(),
+                    ..NewRequest::default()
+                },
+            )
+            .await,
+    ))?;
+    show(
+        "manager submits it",
+        purchasing.submit_request(&manager, COMPANY, empty.id).await,
+    );
+    show(
+        "manager adds a line",
+        purchasing
+            .update_request(
+                &manager,
+                COMPANY,
+                empty.id,
+                &RequestChanges {
+                    lines: Some(vec![line("Carton 400x300", "50", "box")]),
+                    ..RequestChanges::default()
+                },
+            )
+            .await,
+    );
+    show(
+        "manager submits it",
+        purchasing.submit_request(&manager, COMPANY, empty.id).await,
+    );
+    show(
+        "admin rejects it without a reason",
+        purchasing
+            .reject_request(&admin, COMPANY, empty.id, " ")
+            .await,
+    );
+    show(
+        "admin rejects it",
+        purchasing
+            .reject_request(&admin, COMPANY, empty.id, "Use the stock in bay 4")
+            .await,
+    );
+    show(
+        "manager cancels the rejected request",
+        purchasing
+            .cancel_request(&manager, COMPANY, empty.id, "No longer needed")
+            .await,
+    );
+
+    let gloves = saved(show(
+        "manager drafts a request for gloves",
+        purchasing
+            .create_request(
+                &manager,
+                COMPANY,
+                &NewRequest {
+                    title: "Gloves".into(),
+                    lines: vec![line("Nitrile gloves, size M", "20", "box")],
+                    ..NewRequest::default()
+                },
+            )
+            .await,
+    ))?;
+    show(
+        "viewer drafts a request",
+        purchasing
+            .create_request(
+                &viewer,
+                COMPANY,
+                &NewRequest {
+                    title: "Viewer's request".into(),
+                    ..NewRequest::default()
+                },
+            )
+            .await,
+    );
+    show(
+        "manager cancels the gloves draft",
+        purchasing
+            .cancel_request(&manager, COMPANY, gloves.id, "Ordered with the brackets")
+            .await,
+    );
+
+    // PostgreSQL itself refuses what the facade never attempts: a change to
+    // a submitted request's header, and any change to its history.
+    for (step, sql) in [
+        (
+            "SQL renames the approved request",
+            "UPDATE supply_chain_purchasing_requests SET title='Renamed' WHERE id=$1",
+        ),
+        (
+            "SQL rewrites the approved request's history",
+            "UPDATE supply_chain_purchasing_request_events SET reason='Rewritten' WHERE request_id=$1",
+        ),
+        (
+            "SQL deletes the approved request's lines",
+            "DELETE FROM supply_chain_purchasing_request_lines WHERE request_id=$1",
+        ),
+        (
+            "SQL cancels the approved request without a history row",
+            "UPDATE supply_chain_purchasing_requests SET status='cancelled' WHERE id=$1",
+        ),
+    ] {
+        match client.execute(sql, &[&brackets.id]).await {
+            Ok(rows) => println!("{step}: changed {rows} row(s)"),
+            Err(error) => println!(
+                "{step}: refused ({})",
+                error
+                    .as_db_error()
+                    .map(|db| db.message().to_owned())
+                    .unwrap_or_else(|| error.to_string())
+            ),
+        }
+    }
+
+    if let Some(request) = purchasing
+        .get_request(&manager, COMPANY, brackets.id)
+        .await?
+    {
+        println!("PR-{} history:", request.request_number);
+        for event in &request.events {
+            println!(
+                "  {} -> {} by user {}{}",
+                event.from_status.map(|s| s.as_str()).unwrap_or("created"),
+                event.to_status.as_str(),
+                event.actor_user_id,
+                event
+                    .reason
+                    .as_deref()
+                    .map(|reason| format!(" ({reason})"))
+                    .unwrap_or_default()
+            );
+        }
+    }
+    println!("company {COMPANY}'s purchase requests:");
+    print_requests(
+        &purchasing
+            .list_requests(&manager, COMPANY, RequestQuery::default())
+            .await?,
+    );
     println!("company {COMPANY}'s suppliers:");
     print_suppliers(&purchasing.list_suppliers(&manager, COMPANY, false).await?);
     println!("company {COMPANY}'s tax codes:");

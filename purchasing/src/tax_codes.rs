@@ -3,7 +3,7 @@
 //! rate it was priced with, so a later rate change leaves posted orders as
 //! they were. Private to the facade.
 use crate::validate::{required_text, Checks, BLANK, INVALID, TAKEN};
-use crate::{FieldError, NewTaxCode, Outcome, TaxCode};
+use crate::{FieldError, NewTaxCode, Outcome, Refusal, TaxCode, TaxCodeChanges};
 use bilibi_database::{Change, MutationTransaction, Result};
 use rust_decimal::Decimal;
 use serde_json::{json, Value};
@@ -104,10 +104,12 @@ pub(crate) async fn create(
 ) -> Result<Outcome<TaxCode>> {
     let valid = match validate(input) {
         Ok(valid) => valid,
-        Err(errors) => return Ok(Outcome::Refused(errors)),
+        Err(errors) => return Ok(Outcome::Refused(Refusal::Invalid(errors))),
     };
     if code_taken(tx.sql(), company_id, &valid.code).await? {
-        return Ok(Outcome::Refused(vec![FieldError::new("code", TAKEN)]));
+        return Ok(Outcome::Refused(Refusal::Invalid(vec![FieldError::new(
+            "code", TAKEN,
+        )])));
     }
     let active = input.active;
     let created = tx
@@ -126,7 +128,7 @@ pub(crate) async fn create(
                 let change = Change {
                     kind: "supply_chain.purchasing.tax_code".into(),
                     id: created.id,
-                    old: Value::Null,
+                    old: json!({}),
                     new: to_json(&created),
                 };
                 Ok((created, vec![change]))
@@ -134,4 +136,71 @@ pub(crate) async fn create(
         })
         .await?;
     Ok(Outcome::Saved(created))
+}
+
+async fn get(
+    client: &impl GenericClient,
+    tenant: i64,
+    company_id: i64,
+    tax_code_id: i64,
+) -> Result<Option<TaxCode>> {
+    client
+        .query_opt(
+            &format!("SELECT {COLUMNS} FROM supply_chain_purchasing_tax_codes WHERE tenant_id=$1 AND company_id=$2 AND id=$3"),
+            &[&tenant, &company_id, &tax_code_id],
+        )
+        .await?
+        .as_ref()
+        .map(from_row)
+        .transpose()
+}
+
+pub(crate) async fn update(
+    tx: &mut MutationTransaction<'_>,
+    tenant: i64,
+    company_id: i64,
+    tax_code_id: i64,
+    changes: &TaxCodeChanges,
+) -> Result<Outcome<TaxCode>> {
+    let Some(current) = get(tx.sql(), tenant, company_id, tax_code_id).await? else {
+        return Ok(Outcome::Refused(Refusal::TaxCodeNotFound));
+    };
+    let mut checks = Checks::default();
+    let mut next = current.clone();
+    if let Some(name) = &changes.name {
+        next.name = checks.take(required_text("name", name, 120));
+    }
+    if let Some(value) = &changes.rate {
+        next.rate = checks.take(rate(value));
+    }
+    if let Some(active) = changes.active {
+        next.active = active;
+    }
+    if let Err(errors) = checks.finish() {
+        return Ok(Outcome::Refused(Refusal::Invalid(errors)));
+    }
+    let updated = tx
+        .mutate(move |sql| {
+            Box::pin(async move {
+                let row = sql
+                    .query_one(
+                        &format!(
+                            "UPDATE supply_chain_purchasing_tax_codes SET name=$3,rate=$4,active=$5,updated_at=now() AT TIME ZONE 'UTC' \
+                             WHERE company_id=$1 AND id=$2 RETURNING {COLUMNS}"
+                        ),
+                        &[&company_id, &current.id, &next.name, &next.rate, &next.active],
+                    )
+                    .await?;
+                let updated = from_row(&row)?;
+                let change = Change {
+                    kind: "supply_chain.purchasing.tax_code".into(),
+                    id: updated.id,
+                    old: to_json(&current),
+                    new: to_json(&updated),
+                };
+                Ok((updated, vec![change]))
+            })
+        })
+        .await?;
+    Ok(Outcome::Saved(updated))
 }

@@ -51,10 +51,16 @@ inventory::submit! {
         id: MODULE,
         layer: Layer::Domains,
         dependencies: &["base/authz", "base/database", "base/menu", "base/tenancy", "core/company"],
-        migrations: &[(
-            "supply-chain-purchasing-001-suppliers-tax-codes",
-            include_str!("../migrations/001-suppliers-tax-codes.sql"),
-        )],
+        migrations: &[
+            (
+                "supply-chain-purchasing-001-suppliers-tax-codes",
+                include_str!("../migrations/001-suppliers-tax-codes.sql"),
+            ),
+            (
+                "supply-chain-purchasing-002-requests-orders",
+                include_str!("../migrations/002-requests-orders.sql"),
+            ),
+        ],
         services: &[Service {
             id: SERVICE,
             factory: |services| {
