@@ -18,6 +18,7 @@ bilibi-core.workspace = true
 bilibi-database.workspace = true
 bilibi-domains.workspace = true
 bilibi-extensions.workspace = true
+bilibi-events.workspace = true
 bilibi-module-registry.workspace = true
 bilibi-ports.workspace = true
 bilibi-session.workspace = true
