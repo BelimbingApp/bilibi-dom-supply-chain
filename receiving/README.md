@@ -52,7 +52,7 @@ Each posting records one event **per line**, in line-number order, inside the bu
 
 ## Pages and menu
 
-The Goods receipts menu item (`supply_chain.receipts`, order 25) sits under Purchasing's Supply chain root for accounts holding `supply-chain.receiving.view`. Service `supply_chain/receiving.pages` serves three framed live pages, each behind that capability. They work in the signed-in account's own company, read each write's capability again on every write-shaped event, and the facade checks it once more; a refusal or a lost grant is a flash with Bilimbi's sentence (`Refusal::text`), never a cleared page.
+The Goods receipts menu item (`supply_chain.receipts`, order 25) sits under Purchasing's Supply chain root for accounts holding `supply-chain.receiving.view`. Service `supply_chain/receiving.pages` serves three framed live pages, each behind that capability. It declares their live-event writes as a `Pending::Every` page-write allowance (Bilibi `apps/base/agent_api/README.md`), because they write through the facade rather than an operation contract. They work in the signed-in account's own company, read each write's capability again on every write-shaped event, and the facade checks it once more; a refusal or a lost grant is a flash with Bilimbi's sentence (`Refusal::text`), never a cleared page.
 
 | Page | Path | Bilimbi | Does |
 | --- | --- | --- | --- |

@@ -9,7 +9,7 @@ use bilibi_database::{Db, MutationBoundary};
 use bilibi_events::{EventType, Events, EVENTS};
 use bilibi_menu::{MenuItem, Requirement};
 use bilibi_module_registry::{
-    contributions::{Access, Method, Route, ROUTES},
+    contributions::{Access, Method, PageWrites, Pending, Route, PAGE_WRITES, ROUTES},
     Contribution, Layer, Module, Provenance, Service,
 };
 use bilibi_ports::{Port, PORTS};
@@ -143,6 +143,17 @@ const PAGES: &str = "supply_chain/purchasing.pages";
 pub(crate) const SUPPLIERS_PATH: &str = "/supply-chain/suppliers";
 pub(crate) const ORDERS_PATH: &str = "/supply-chain/purchase-orders";
 pub(crate) const REQUESTS_PATH: &str = "/supply-chain/purchase-requests";
+
+// ADR 01 gap, listed so it stays visible: these pages still write through
+// the facade rather than an operation contract (`base/agent_api` README,
+// "Page writes declaration and check"). The host refuses a live-event write
+// from a page service that declares none.
+inventory::submit! {
+    Contribution::new(PAGE_WRITES, PAGES, provenance!(), &PageWrites {
+        service: PAGES, contracts: &[],
+        pending: Pending::Every { reason: "Suppliers, tax codes, purchase requests and purchase order lifecycle actions write through the Purchasing facade; the one contract, supply_chain.purchasing.order.amend, has no page caller." },
+    })
+}
 
 inventory::submit! {
     Contribution::new(ROUTES, "supply_chain/purchasing.suppliers", provenance!(), &Route {

@@ -6,8 +6,8 @@ use crate::{
     MANAGE_ORDERS, MODULE,
 };
 use bilibi_agent_api::{
-    Definitions, Error, Guide, Handler, Operation, OperationClient, OperationFuture, WriteHandler,
-    DEFINITIONS,
+    Channels, Definitions, Error, Guide, Handler, Operation, OperationClient, OperationFuture,
+    WriteHandler, DEFINITIONS,
 };
 use bilibi_company::organisation;
 use bilibi_database::MutationTransaction;
@@ -268,6 +268,9 @@ inventory::submit! { Contribution::new(DEFINITIONS, "supply_chain/purchasing.age
         capability: MANAGE_ORDERS, input: schema,
         output: || json!({"type":"object","description":"Amended record with status, amendment_count, current lines, exact decimal totals and lifecycle actors."}),
         handler: Handler::SafeWrite(&Amend),
+        // Every door, no step-up: no door-specific facility is needed, and
+        // Supply Chain declares no Base Step-up operation (Bilimbi has none).
+        channels: Channels::Every, step_up: &[],
     }],
     guides: &[Guide {
         key: "supply_chain.purchasing.order", title: "Purchase order amendments",
