@@ -23,6 +23,7 @@
 {% call forms::input(field=supplier_reference) %}{% endcall %}
 </div>
 {% call forms::input(field=notes) %}{% endcall %}
+<div class="overflow-x-auto">
 <table id="receipt-form-lines" class="w-full text-left text-sm">
 <thead class="text-xs text-ink-muted"><tr><th class="px-1 py-1">#</th><th class="px-1 py-1">Description</th><th class="px-1 py-1 text-right">Ordered</th><th class="px-1 py-1 text-right">Received so far</th><th class="px-1 py-1 text-right">Outstanding</th><th class="px-1 py-1">Accepted</th><th class="px-1 py-1">Rejected</th><th class="px-1 py-1">Rejection reason</th></tr></thead>
 <tbody>
@@ -31,6 +32,7 @@
 {%- endfor %}
 </tbody>
 </table>
+</div>
 <p class="mb-3 mt-1 text-xs text-ink-muted">Lines with no accepted or rejected quantity are left out. Accepted goods count against the order; rejected goods need a reason.</p>
 {% call ui::button(variant=bilibi_ui::ButtonVariant::Primary, button_type="submit") %}Save draft receipt{% endcall %}
 </form>

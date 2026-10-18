@@ -17,6 +17,7 @@
 {%- for field in header_fields %}{% call forms::input(field=field) %}{% endcall %}{% endfor -%}
 </div>
 {% call forms::input(field=justification) %}{% endcall %}
+<div class="overflow-x-auto">
 <table id="request-form-lines" class="w-full text-left text-sm">
 <thead class="text-xs text-ink-muted"><tr><th class="px-1 py-1">Description</th><th class="px-1 py-1">Quantity</th><th class="px-1 py-1">Unit</th><th class="px-1 py-1">Item reference</th></tr></thead>
 <tbody>
@@ -25,6 +26,7 @@
 {%- endfor %}
 </tbody>
 </table>
+</div>
 <p class="mb-3 mt-1 text-xs text-ink-muted">Rows without a description are ignored.</p>
 {% call ui::button(variant=bilibi_ui::ButtonVariant::Primary, button_type="submit") %}Save draft{% endcall %}
 </form>

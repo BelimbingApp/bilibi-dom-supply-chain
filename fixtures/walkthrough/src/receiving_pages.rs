@@ -48,5 +48,42 @@ pub(super) async fn run(services: &Services, manager: &Scope, admin: &Scope) -> 
         "S6: PO {} is sent; sign in as manager@example.test and open /supply-chain/receive?order={} to receive it, then post, cancel or reverse receipts from /supply-chain/receipts.",
         order.order_number, order.id
     );
+    // SU1: more than 512 posted controls must still produce a complete
+    // browser receipt. Each of these 200 rows contributes three controls.
+    let bulk = saved(show(
+        "SU1 draft order for a large browser receipt",
+        p.create_order(
+            manager,
+            COMPANY,
+            &NewOrder {
+                supplier_id: Some(supplier),
+                currency_code: "MYR".into(),
+                reference: "SU1 large receipt".into(),
+                lines: (1..=200)
+                    .map(|number| {
+                        order_line(&format!("Delivery line {number}"), "1", "unit", "1", None)
+                    })
+                    .collect(),
+                ..NewOrder::default()
+            },
+        )
+        .await,
+    ))?;
+    saved(show(
+        "SU1 submit large order",
+        p.submit_order(manager, COMPANY, bulk.id).await,
+    ))?;
+    saved(show(
+        "SU1 approve large order",
+        p.approve_order(admin, COMPANY, bulk.id, "").await,
+    ))?;
+    saved(show(
+        "SU1 send large order",
+        p.send_order(manager, COMPANY, bulk.id).await,
+    ))?;
+    println!(
+        "SU1: receive all 200 lines in the browser at /supply-chain/receive?order={}",
+        bulk.id
+    );
     Ok(())
 }
