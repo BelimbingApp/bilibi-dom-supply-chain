@@ -169,10 +169,7 @@ impl Receipts {
                     self.flash.error(DENIED);
                     return Ok(());
                 }
-                let percent: String = text(payload, "settings[over_receipt_tolerance_percent]")
-                    .chars()
-                    .take(64)
-                    .collect();
+                let percent = text(payload, "settings[over_receipt_tolerance_percent]").to_owned();
                 match outcome(
                     self.core
                         .receiving

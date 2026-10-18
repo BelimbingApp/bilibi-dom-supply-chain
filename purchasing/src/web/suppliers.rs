@@ -228,7 +228,7 @@ impl Suppliers {
         let purchasing = &self.core.purchasing;
         match kind {
             "save_supplier" => {
-                let form = params::form_values(payload, "supplier");
+                let form = form_values(payload, "supplier", &SUPPLIER_FIELDS);
                 let value = |key: &str| form.get(key).cloned().unwrap_or_default();
                 let supplier = NewSupplier {
                     code: value("code"),
@@ -258,7 +258,7 @@ impl Suppliers {
                 }
             }
             "save_tax_code" => {
-                let form = params::form_values(payload, "tax_code");
+                let form = form_values(payload, "tax_code", &TAX_CODE_FIELDS);
                 let value = |key: &str| form.get(key).cloned().unwrap_or_default();
                 let tax_code = NewTaxCode {
                     code: value("code"),
@@ -546,6 +546,19 @@ fn tax_code_fields(form: &HashMap<String, String>) -> Vec<Field> {
                     .attr("inputmode", "decimal")
                     .hint("A line keeps the rate it was priced with."),
             }
+        })
+        .collect()
+}
+
+/// Keep each submitted field intact for the facade's codepoint validation.
+/// The shared query-form coercion drops values over 1 KiB; optional address
+/// fields must instead be refused when too long, never silently discarded.
+fn form_values(payload: &Value, namespace: &str, fields: &[&str]) -> HashMap<String, String> {
+    fields
+        .iter()
+        .filter_map(|field| {
+            let value = payload.get(format!("{namespace}[{field}]"))?.as_str()?;
+            Some(((*field).to_owned(), value.to_owned()))
         })
         .collect()
 }

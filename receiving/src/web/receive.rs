@@ -163,7 +163,7 @@ impl Receive {
         Ok(())
     }
     /// The header fields and the per-order-line rows the form posted
-    /// (`receipt[...]`, `receipt[lines][<order_line_id>][...]`), bounded.
+    /// (`receipt[...]`, `receipt[lines][<order_line_id>][...]`).
     fn read_form(&mut self, payload: &Value) {
         self.form.clear();
         self.rows.clear();
@@ -171,8 +171,7 @@ impl Receive {
             .as_object()
             .into_iter()
             .flatten()
-            .filter_map(|(k, v)| Some((k, v.as_str().filter(|v| v.len() <= 4096)?)))
-            .take(512);
+            .filter_map(|(k, v)| Some((k, v.as_str()?)));
         for (key, value) in entries {
             let Some(inner) = key
                 .strip_prefix("receipt[")
