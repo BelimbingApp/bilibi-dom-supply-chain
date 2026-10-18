@@ -296,7 +296,7 @@ All three use version **1** and subject **`order:<order_id>`**. The Base envelop
 
 ## Reviewed agent amendment
 
-`supply_chain.purchasing.order.amend` exposes `amend_order` through the Platform's `/api/v1` and `/mcp` plan protocol, under `supply-chain.purchasing.orders.manage`; neither `view` nor `orders.approve` is required. Describe the operation and read guide `supply_chain.purchasing.order` before constructing a plan. Direct operation calls never write. No amendment page is added.
+`supply_chain.purchasing.order.amend` exposes `amend_order` through the Platform's `/api/v1` and `/mcp` plan protocol, under `supply-chain.purchasing.orders.manage`; neither `view` nor `orders.approve` is required. Describe the operation and read guide `supply_chain.purchasing.order` before constructing a plan. Direct operation calls never write. No amendment page is added. The contract serves every door (`channels: every`) and lists no step-up (`step_up: []`): Supply Chain declares no Base Step-up operation, as Bilimbi has none.
 
 Required input is `company_id`, `order_id`, `expected_amendment_count` (the order's current count, initially 0), `reason` and the complete replacement `lines`. Each line requires `description`, `quantity`, `unit` and `unit_price`, with optional `external_item_ref` and `tax_code_id`. Decimals are strings, not JSON numbers; the facade validates precision and bounds. Omitted line tax means no tax. Optional `reference`, `notes` and `expected_on` preserve current values when omitted and clear them when blank; dates are `YYYY-MM-DD`. Unknown fields and `null` inputs are refused. Supplier, currency, request link, actors, line identities and received quantities cannot be supplied.
 
@@ -314,7 +314,7 @@ The Supply chain menu (`supply_chain`, order 55) offers Purchase requests
 (`/supply-chain/purchase-requests`), Purchase orders
 (`/supply-chain/purchase-orders`) and Suppliers (`/supply-chain/suppliers`)
 to accounts holding `supply-chain.purchasing.view`; the root stays hidden
-from everyone else. Amendments have no editor, as in Bilimbi; recorded amendments appear on the order detail. The module contributes all four pages through service `supply_chain/purchasing.pages`, each behind `supply-chain.purchasing.view`. The pages work in the signed-in account's own company (its
+from everyone else. Amendments have no editor, as in Bilimbi; recorded amendments appear on the order detail. The module contributes all four pages through service `supply_chain/purchasing.pages`, each behind `supply-chain.purchasing.view`, and declares their live-event writes as a `Pending::Every` page-write allowance (Bilibi `apps/base/agent_api/README.md`): they write through the facade, and the amendment contract has no page caller. The pages work in the signed-in account's own company (its
 affiliation), read each write's capability again on every write-shaped
 event, and the facade checks it once more; a refusal or a lost grant is a
 flash with Bilimbi's sentence, never a cleared page.

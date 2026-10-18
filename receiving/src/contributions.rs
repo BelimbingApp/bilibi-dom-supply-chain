@@ -7,7 +7,7 @@ use bilibi_database::{Db, MutationBoundary};
 use bilibi_events::{EventType, Events, EVENTS};
 use bilibi_menu::{MenuItem, Requirement};
 use bilibi_module_registry::{
-    contributions::{Access, Method, Route, ROUTES},
+    contributions::{Access, Method, PageWrites, Pending, Route, PAGE_WRITES, ROUTES},
     Contribution, Layer, Module, Provenance, Service,
 };
 use bilibi_supply_chain_purchasing::Purchasing;
@@ -69,6 +69,17 @@ const PAGES: &str = "supply_chain/receiving.pages";
 /// The page paths, Bilimbi's `priv/web_routes.exs` verbatim.
 pub(crate) const RECEIPTS_PATH: &str = "/supply-chain/receipts";
 pub(crate) const RECEIVE_PATH: &str = "/supply-chain/receive";
+
+// ADR 01 gap, listed so it stays visible: these pages still write through
+// the facade rather than an operation contract (`base/agent_api` README,
+// "Page writes declaration and check"). The host refuses a live-event write
+// from a page service that declares none.
+inventory::submit! {
+    Contribution::new(PAGE_WRITES, PAGES, provenance!(), &PageWrites {
+        service: PAGES, contracts: &[],
+        pending: Pending::Every { reason: "Saving, posting, cancelling and reversing goods receipts and the over-receipt tolerance write through the Receiving facade; no contract yet." },
+    })
+}
 
 inventory::submit! {
     Contribution::new(ROUTES, "supply_chain/receiving.receipts", provenance!(), &Route {
