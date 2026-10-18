@@ -85,5 +85,31 @@ pub(super) async fn run(services: &Services, manager: &Scope, admin: &Scope) -> 
         "SU1: receive all 200 lines in the browser at /supply-chain/receive?order={}",
         bulk.id
     );
+    // The manager can decide these in Chrome: another actor submitted them.
+    for decision in ["approval", "return"] {
+        let order = saved(show(
+            &format!("SU1 draft order for browser {decision}"),
+            p.create_order(
+                admin,
+                COMPANY,
+                &NewOrder {
+                    supplier_id: Some(supplier),
+                    currency_code: "MYR".into(),
+                    reference: format!("SU1 {decision}"),
+                    lines: vec![order_line("Browser decision item", "2", "unit", "5", None)],
+                    ..NewOrder::default()
+                },
+            )
+            .await,
+        ))?;
+        saved(show(
+            "SU1 submit order for browser decision",
+            p.submit_order(admin, COMPANY, order.id).await,
+        ))?;
+        println!(
+            "SU1: manager browser {decision} at /supply-chain/purchase-orders/{}",
+            order.id
+        );
+    }
     Ok(())
 }
