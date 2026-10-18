@@ -360,6 +360,13 @@ pub async fn run(url: &str) -> Result<()> {
     let mut services = Services::default();
     services.provide("bootstrap.database", Arc::new(db.clone()))?;
     services.install(&modules)?;
+    // Match the web host's documented development mode for this disposable
+    // fixture; other environments retain the Platform's step-up enforcement.
+    if std::env::var("BILIBI_ENV").as_deref() == Ok("development") {
+        services
+            .get::<bilibi_base::step_up::StepUp>(bilibi_base::step_up::SERVICE)?
+            .set_enforced(false);
+    }
     // Reconciliation creates each tenant's contributed system roles, among
     // them Tenant Owner with the seven Purchasing capabilities.
     let grants = services.get::<Grants>("base/authz.grants")?;
