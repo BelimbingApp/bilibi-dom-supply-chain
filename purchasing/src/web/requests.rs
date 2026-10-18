@@ -298,7 +298,9 @@ impl Requests {
             .flatten()
             .filter(|(key, _)| key.starts_with("request["))
             .filter_map(|(key, value)| {
-                let value = value.as_str().filter(|value| value.len() <= 1024)?;
+                // The facade validates codepoint limits. Dropping a long field here
+                // would silently save an absent justification or line instead.
+                let value = value.as_str()?;
                 Some((key.clone(), value.to_owned()))
             })
             .take(64)

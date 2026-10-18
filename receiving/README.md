@@ -67,3 +67,7 @@ The Goods receipts menu item (`supply_chain.receipts`, order 25) sits under Purc
 ## Proof
 
 `fixtures/walkthrough` exercises the facade against a disposable migrated PostgreSQL 18 database, including refusal/rollback, tolerance, reversal, cursor, summary, authorization and SQL retention cases. There are no unit tests. The release gate is the pinned Platform's `scripts/domain-ci.sh`.
+
+Receipt forms retain every submitted line and pass complete text and tolerance values to the facade for validation; a page never saves a shortened number or silently omits oversized optional text. The line grid scrolls within the form at phone widths. The walkthrough leaves an additional sent order with 200 lines (`SU1 large receipt`) to verify browser submission beyond 512 controls without omitting lines.
+
+Run the disposable walkthrough with `BILIBI_ENV=development`; it applies the same documented development step-up setting as the web host when assigning fixture roles. Other environments keep the Platform enforcement. This affects only the example crate.

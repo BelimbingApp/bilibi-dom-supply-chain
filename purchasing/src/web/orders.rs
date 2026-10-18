@@ -206,11 +206,7 @@ impl Orders {
                     .into_iter()
                     .flatten()
                     .filter(|(k, _)| k.starts_with("order["))
-                    .filter_map(|(k, v)| {
-                        v.as_str()
-                            .filter(|v| v.len() <= 4096)
-                            .map(|v| (k.clone(), v.to_owned()))
-                    })
+                    .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_owned())))
                     .take(64)
                     .collect();
                 let value = |key: &str| self.form.get(key).cloned().unwrap_or_default();
