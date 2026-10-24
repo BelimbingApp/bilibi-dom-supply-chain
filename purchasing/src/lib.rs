@@ -38,7 +38,7 @@ pub use order_types::{
     OrderFromRequest, OrderLine, OrderLineFacts, OrderQuery, OrderStatus, ReceiptLine,
 };
 
-use bilibi_company::{organisation, WriteError};
+use bilibi_company::WriteError;
 use bilibi_database::{Db, Error, MutationBoundary, MutationTransaction, Result};
 use bilibi_events::Events;
 use bilibi_tenancy::Scope;
@@ -1027,7 +1027,7 @@ impl Purchasing {
         expected_amendment_count: i32,
     ) -> Result<Outcome<Order>> {
         authorize(tx.sql(), scope, company_id, MANAGE_ORDERS).await?;
-        match organisation::require_writable(tx.sql(), scope, company_id, true).await {
+        match bilibi_company::require_writable(tx.sql(), scope, company_id, true).await {
             Ok(_) => (),
             Err(WriteError::Archived) => return Ok(Outcome::CompanyArchived),
             Err(WriteError::NotFound) => return Err(Error::NotFound),
@@ -1170,7 +1170,7 @@ impl Purchasing {
             .mutations
             .begin(client, scope.mutation_context(action))
             .await?;
-        match organisation::require_writable(tx.sql(), scope, company_id, true).await {
+        match bilibi_company::require_writable(tx.sql(), scope, company_id, true).await {
             Ok(_) => Ok(Some(tx)),
             Err(WriteError::Archived) => {
                 tx.rollback().await?;
@@ -1192,7 +1192,7 @@ async fn authorize(
     company_id: i64,
     capability: &str,
 ) -> Result<()> {
-    organisation::authorize_target(client, scope, company_id, capability)
+    bilibi_company::authorize_target(client, scope, company_id, capability)
         .await
         .map(|_| ())
 }
@@ -1234,7 +1234,7 @@ async fn receipt_transaction(
         return Err(Error::Forbidden);
     }
     authorize(tx.sql(), scope, company_id, RECEIVE_ORDERS).await?;
-    match organisation::require_writable(tx.sql(), scope, company_id, true).await {
+    match bilibi_company::require_writable(tx.sql(), scope, company_id, true).await {
         Ok(_) => Ok(true),
         Err(WriteError::Archived) => Ok(false),
         Err(WriteError::NotFound) => Err(Error::NotFound),
