@@ -14,7 +14,7 @@ pub use contributions::{
 };
 pub use types::*;
 
-use bilibi_company::{organisation, WriteError};
+use bilibi_company::WriteError;
 use bilibi_database::{Db, Error, MutationBoundary, MutationTransaction, Result};
 use bilibi_events::Events;
 use bilibi_supply_chain_purchasing::Purchasing;
@@ -272,7 +272,7 @@ impl Receiving {
             .begin(client, scope.mutation_context(action))
             .await?;
         authorize(tx.sql(), scope, company_id, capability).await?;
-        match organisation::require_writable(tx.sql(), scope, company_id, true).await {
+        match bilibi_company::require_writable(tx.sql(), scope, company_id, true).await {
             Ok(_) => Ok(Some(tx)),
             Err(WriteError::Archived) => {
                 tx.rollback().await?;
@@ -291,7 +291,7 @@ async fn authorize(
     company_id: i64,
     cap: &str,
 ) -> Result<()> {
-    organisation::authorize_target(c, scope, company_id, cap)
+    bilibi_company::authorize_target(c, scope, company_id, cap)
         .await
         .map(|_| ())
 }
