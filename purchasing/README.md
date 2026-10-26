@@ -67,9 +67,9 @@ missing grant is `Error::Forbidden`; a company the scope cannot see is
 
 Every call authorizes its capability for the scope's signed-in actor and the
 target company when it runs, through Core Company's
-`organisation::authorize_target` (Bilimbi `authorize_company_target/3`): the
+`bilibi_company::authorize_target` (Bilimbi `authorize_company_target/3`): the
 actor's own company, or a sibling company with Core Company's tenant-wide
-reach. Writes then take `organisation::require_writable` with the row lock
+reach. Writes then take `bilibi_company::require_writable` with the row lock
 inside their mutation transaction, so an archived company is refused and one
 company's purchasing writes run one at a time; that lock is also what makes
 a code unique without a race and, later, keeps a supplier from being
@@ -304,7 +304,7 @@ Preview validates the same rules as commit without business mutations and shows 
 
 Commit uses the plan's `MutationTransaction`, reauthorizes through Core Company, locks the writable company and order, and captures all changes through the existing facade. Plan revalidation detects changed order or tax facts and revoked grants. `expected_amendment_count` is checked again under lock, so two amendments to the same order in one plan refuse the second and roll back the whole plan, including audit and code consumption. Use separate reviewed plans instead. Invalid values and business refusals retain the facade's text in field errors (line paths are zero-based, such as `lines.0.quantity`); missing orders return `not_found` and stale counts return `stale_plan`.
 
-Platform limitation: `OperationClient` cannot enter the generic Company writable guard. Preview authorizes with Company's equivalent object-safe `organisation::Directory::target`, then takes a tenant-scoped company row lock on the supplied plan connection and checks the locked status. This avoids a second pool connection and keeps reference facts locked through commit revalidation and execution. Commit uses `authorize_target` and `require_writable` normally. An object-safe Company writable guard would remove the narrow preview SQL workaround; no Platform code is changed here.
+Platform limitation: `OperationClient` cannot enter the generic Company writable guard. Preview authorizes with Company's equivalent object-safe `bilibi_company::Directory::target`, then takes a tenant-scoped company row lock on the supplied plan connection and checks the locked status. This avoids a second pool connection and keeps reference facts locked through commit revalidation and execution. Commit uses `authorize_target` and `require_writable` normally. An object-safe Company writable guard would remove the narrow preview SQL workaround; no Platform code is changed here.
 
 `fixtures/walkthrough` exercises the real registry and plan services with authenticated sessions: manage without view, direct-write refusal, mutation-free preview, header-only and changed-line commits, sent-order amendments, replay, duplicate-order atomic rollback, tax drift, grant revocation and field errors. It prints no credentials or plan codes and creates records only through the facades in its disposable database.
 

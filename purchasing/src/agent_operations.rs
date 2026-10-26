@@ -9,7 +9,6 @@ use bilibi_agent_api::{
     Channels, Definitions, Error, Guide, Handler, Operation, OperationClient, OperationFuture,
     WriteHandler, DEFINITIONS,
 };
-use bilibi_company::organisation;
 use bilibi_database::MutationTransaction;
 use bilibi_events::Events;
 use bilibi_module_registry::{Contribution, Provenance};
@@ -118,7 +117,7 @@ impl Purchasing {
         let company_id = integer(input, "company_id")?;
         // Company's object-safe equivalent of authorize_target, on this same
         // connection. No pool/global binding and no extra VIEW capability.
-        organisation::Directory
+        bilibi_company::Directory
             .target(
                 client,
                 scope,
