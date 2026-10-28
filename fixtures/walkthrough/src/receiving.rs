@@ -603,6 +603,7 @@ pub(super) async fn run(
             manager.tenant(),
             manager.user(),
             Some(admin.user()),
+            None,
             "walkthrough".into(),
         )
         .await?;
