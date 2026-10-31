@@ -7,8 +7,9 @@ use bilibi_agent_api::{page::Call, Error as OperationError};
 use bilibi_database::{Error, Result};
 use bilibi_tenancy::Scope;
 use bilibi_ui::{
-    BuiltinColumn, Button, ButtonVariant, Choice, Fact, Facts, Field, FlexRow, FlexTable, Form,
-    Html, InputKind, InstanceBanner, ListColumns, Modal, ModalWidth, SectionHeading, StatusKind,
+    params, BuiltinColumn, Button, ButtonVariant, Choice, Fact, Facts, Field, FlexRow, FlexTable,
+    Form, Html, InputKind, InstanceBanner, ListColumns, Modal, ModalWidth, RowMode, SectionHeading,
+    StatusKind,
 };
 use serde_json::{json, Value};
 
@@ -24,6 +25,8 @@ struct Review {
     input: Value,
     code: String,
     response: Value,
+    before_columns: ListColumns,
+    after_columns: ListColumns,
 }
 pub(super) struct Editor {
     input: Value,
@@ -127,6 +130,16 @@ impl Editor {
             contract: AMEND,
         };
         match event {
+            "amend_before_grid" | "amend_after_grid" => {
+                if let Some(review) = &mut self.review {
+                    let columns = if event == "amend_before_grid" {
+                        &mut review.before_columns
+                    } else {
+                        &mut review.after_columns
+                    };
+                    columns.handle(&params::string_values(payload));
+                }
+            }
             "amend_edit" => self.review = None,
             "amend_review" if self.review.is_none() => {
                 self.capture(payload);
@@ -152,7 +165,14 @@ impl Editor {
                             .ok_or(Error::Internal)?
                             .to_owned();
                         self.flash = Flash::default();
+                        let preview = &response["results"][0]["preview"]["result"];
+                        let before_columns =
+                            review_columns("amend-before-lines", &preview["before"]["lines"])?;
+                        let after_columns =
+                            review_columns("amend-after-lines", &preview["after"]["lines"])?;
                         self.review = Some(Review {
+                            before_columns,
+                            after_columns,
                             input: self.input.clone(),
                             code,
                             response,
@@ -203,6 +223,7 @@ impl Editor {
                     "Reason":preview["reason"], "All current lines will be replaced":preview["replaces_all_lines"],
                     "Fresh approval and sending required":preview["reapproval_required"], "Review expires at":response["expires_at"]
                 }),
+                None,
             )?;
             vec![
                 banner,
@@ -211,12 +232,20 @@ impl Editor {
                     title: "Current order",
                     ..SectionHeading::default()
                 })?,
-                facts("amend-before", &preview["before"])?,
+                facts(
+                    "amend-before",
+                    &preview["before"],
+                    Some((&review.before_columns, "amend_before_grid")),
+                )?,
                 render(&SectionHeading {
                     title: "After amendment",
                     ..SectionHeading::default()
                 })?,
-                facts("amend-after", &preview["after"])?,
+                facts(
+                    "amend-after",
+                    &preview["after"],
+                    Some((&review.after_columns, "amend_after_grid")),
+                )?,
                 render(&Buttons {
                     buttons: vec![
                         button("Cancel", "amend_cancel", false, "")?,
@@ -330,47 +359,64 @@ fn display(value: &Value) -> String {
 }
 // Render every owner fact, including line identities and resolved taxes. Do not
 // rebuild a preview from the draft: it would omit the owner's resolved facts.
-fn facts(id: &str, value: &Value) -> Result<Html> {
-    let Some(object) = value.as_object() else {
-        return Ok(Html::text(&display(value)));
-    };
+fn review_columns(id: &str, lines: &Value) -> Result<ListColumns> {
+    let lines = lines.as_array().ok_or(Error::Internal)?;
+    let keys: std::collections::BTreeSet<_> = lines
+        .iter()
+        .filter_map(Value::as_object)
+        .flat_map(|line| line.keys().cloned())
+        .collect();
+    let mut columns = ListColumns::projection(
+        id,
+        keys.iter()
+            .map(|key| BuiltinColumn::new(key, &key.replace('_', " ")))
+            .collect(),
+    )
+    .map_err(|_| Error::Internal)?;
+    columns.zoom = RowMode::Compact.zoom();
+    Ok(columns)
+}
+fn facts(id: &str, value: &Value, table: Option<(&ListColumns, &str)>) -> Result<Html> {
+    let object = value.as_object().ok_or(Error::Internal)?;
     let titles: Vec<_> = object.keys().map(|key| key.replace('_', " ")).collect();
     let mut items = Vec::new();
+    let mut tables = Vec::new();
     for ((key, value), title) in object.iter().zip(&titles) {
-        let body = if let Some(lines) = value.as_array() {
-            let keys: std::collections::BTreeSet<_> = lines
-                .iter()
-                .filter_map(Value::as_object)
-                .flat_map(|line| line.keys().cloned())
-                .collect();
-            let columns = keys
-                .iter()
-                .map(|key| BuiltinColumn::new(key, &key.replace('_', " ")))
-                .collect();
+        if let Some(lines) = value.as_array() {
+            let (columns, event) = table.ok_or(Error::Internal)?;
             let rows = lines
                 .iter()
                 .enumerate()
                 .map(|(i, line)| {
-                    keys.iter()
-                        .fold(FlexRow::new(format!("{id}-{i}")), |row, key| {
-                            row.slot(key, Html::text(&display(&line[key])))
+                    line.as_object()
+                        .into_iter()
+                        .flatten()
+                        .fold(FlexRow::new(format!("{id}-{i}")), |row, (key, value)| {
+                            row.slot(key, Html::text(&display(value)))
                         })
                 })
                 .collect();
             let table_id = format!("{id}-{key}");
-            let columns =
-                ListColumns::projection(&table_id, columns).map_err(|_| Error::Internal)?;
-            render(&FlexTable::new(&table_id, columns.flex_columns(), rows))?
+            let mut table = FlexTable::new(&table_id, columns.flex_columns(), rows);
+            table.event = event;
+            table.caption = "Order lines";
+            table.zoom = columns.zoom;
+            tables.push(render(&SectionHeading {
+                title: "Lines",
+                ..SectionHeading::default()
+            })?);
+            tables.push(render(&table)?);
         } else {
-            Html::text(&display(value))
-        };
-        items.push(Fact {
-            title,
-            value: body,
-            ..Fact::default()
-        });
+            items.push(Fact {
+                title,
+                value: Html::text(&display(value)),
+                ..Fact::default()
+            });
+        }
     }
-    render(&Facts { id, items })
+    let mut parts = vec![render(&Facts { id, items })?];
+    parts.extend(tables);
+    render(&Body { parts })
 }
 fn preview_errors(response: &Value) -> String {
     let error = &response["results"][0]["error"];
