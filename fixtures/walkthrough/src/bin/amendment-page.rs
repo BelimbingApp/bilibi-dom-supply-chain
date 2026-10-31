@@ -101,7 +101,7 @@ async fn main() -> Result<()> {
             containers: vec![bilibi_module_registry::Container {
                 layer: bilibi_module_registry::Layer::Domains,
                 id: "supply_chain",
-                modules: bilibi_domains::MODULES.to_vec(),
+                modules: bilibi_domains::MODULES.iter().map(|(id, _)| *id).collect(),
                 commit: None,
                 version: None,
             }],
