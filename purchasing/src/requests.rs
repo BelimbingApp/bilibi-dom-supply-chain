@@ -113,7 +113,10 @@ async fn lines(client: &(impl GenericClient + Sync), request_id: i64) -> Result<
         .collect()
 }
 
-async fn events(client: &(impl GenericClient + Sync), request_id: i64) -> Result<Vec<RequestEvent>> {
+async fn events(
+    client: &(impl GenericClient + Sync),
+    request_id: i64,
+) -> Result<Vec<RequestEvent>> {
     client
         .query(
             &format!("SELECT {EVENT_COLUMNS} FROM supply_chain_purchasing_request_events WHERE request_id=$1 ORDER BY id"),
