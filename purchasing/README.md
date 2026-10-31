@@ -292,7 +292,7 @@ All three use version **1** and subject **`order:<order_id>`**. The Base envelop
 - These are lifecycle snapshots, not a continuously updated draft mirror. A returned draft can delete/replace lines without an amendment. Consumers needing exact snapshot membership must reconcile all parts of a completed batch, identified by tenant, publisher, event name and `snapshot_key`. Commit/stage incomplete parts successfully: refusing an early part while waiting for later parts would block them behind it.
 - Delivery is at least once and ordered per subscriber, tenant, **publisher** and subject. Using `order:<id>` in both Purchasing and Receiving does not order the two publishers together; Payables must tolerate a receipt arriving before its order fact. New subscribers replay retained events through Base Events; an absent Finance subscriber does not block Purchasing. Consumers own their serde types and projection; the JSON contract is the only dependency. See the Platform's `apps/base/events/README.md` for delivery, grants and replay.
 
-## Reviewed agent amendment
+## Reviewed amendment contract
 
 `supply_chain.purchasing.order.amend` exposes `amend_order` through the Platform's `/api/v1` and `/mcp` plan protocol, under `supply-chain.purchasing.orders.manage`; neither `view` nor `orders.approve` is required. Describe the operation and read guide `supply_chain.purchasing.order` before constructing a plan. Direct operation calls never write. The order record page calls this same contract for its amendment form. The contract serves every door (`channels: every`) and lists no step-up (`step_up: []`): Supply Chain declares no Base Step-up operation, as Bilimbi has none.
 

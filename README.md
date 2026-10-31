@@ -40,7 +40,7 @@ After migrating, the Supply chain menu offers Purchase requests, Purchase
 orders and Suppliers to accounts holding `supply-chain.purchasing.view`; the
 Tenant Owner role holds every Purchasing capability.
 
-Approved or sent orders can be amended through the reviewed agent operation `supply_chain.purchasing.order.amend` on `/api/v1` and `/mcp`. It uses the existing facade, requires `supply-chain.purchasing.orders.manage`, and is also called by the order detail’s Amend action. The [operation contract](purchasing/README.md#reviewed-agent-amendment) documents replacement lines, the current amendment-count precondition, preview/commit, reapproval and refusals.
+Approved or sent orders can be amended through the reviewed operation `supply_chain.purchasing.order.amend`. Agents reach it on `/api/v1` and `/mcp`, and the order detail’s Amend action calls the same contract. It uses the existing facade and requires `supply-chain.purchasing.orders.manage`. The [operation contract](purchasing/README.md#reviewed-amendment-contract) documents replacement lines, the current amendment-count precondition, preview/commit, reapproval and refusals.
 
 ## Pages
 
