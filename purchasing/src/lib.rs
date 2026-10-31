@@ -786,7 +786,7 @@ impl Purchasing {
     /// uncommitted writes. Receiving uses this inside its company lock.
     pub async fn get_order_on(
         &self,
-        client: &impl GenericClient,
+        client: &(impl GenericClient + Sync),
         scope: &Scope,
         company_id: i64,
         order_id: i64,
@@ -1200,7 +1200,7 @@ async fn authorize(
 /// [`Purchasing::get_order_line`] on any client, so the port answers on the
 /// caller's connection or transaction.
 async fn order_line(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     line_id: i64,

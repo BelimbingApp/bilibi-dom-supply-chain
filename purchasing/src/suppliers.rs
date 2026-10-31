@@ -44,7 +44,7 @@ fn to_json(supplier: &Supplier) -> Value {
 }
 
 pub(crate) async fn list(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     active_only: bool,
@@ -63,7 +63,7 @@ pub(crate) async fn list(
 
 /// The company's suppliers among `ids`, in any order.
 pub(crate) async fn by_ids(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     ids: &[i64],
@@ -80,7 +80,7 @@ pub(crate) async fn by_ids(
 }
 
 pub(crate) async fn get(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     supplier_id: i64,
@@ -134,7 +134,7 @@ fn validate(input: &NewSupplier) -> std::result::Result<Valid, Vec<FieldError>> 
 
 /// The caller holds the company's writable lock, so this read decides the
 /// unique `(company_id, code)` constraint before the insert can hit it.
-async fn code_taken(client: &impl GenericClient, company_id: i64, code: &str) -> Result<bool> {
+async fn code_taken(client: &(impl GenericClient + Sync), company_id: i64, code: &str) -> Result<bool> {
     Ok(client
         .query_opt(
             "SELECT 1 FROM supply_chain_purchasing_suppliers WHERE company_id=$1 AND code=$2",

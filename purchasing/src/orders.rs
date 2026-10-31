@@ -167,7 +167,7 @@ fn total(order: &mut Order) {
 
 /// The current lines (not superseded) of each order in `ids`, by line number.
 async fn current_lines(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     ids: &[i64],
 ) -> Result<HashMap<i64, Vec<OrderLine>>> {
     let rows = client
@@ -192,7 +192,7 @@ async fn current_lines(
 /// Fills each order's current lines, totals, supplier and request number,
 /// as Bilimbi's `order_view/5` does for a list or one order.
 async fn complete(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     orders: &mut [Order],
@@ -231,7 +231,7 @@ async fn complete(
 }
 
 pub(crate) async fn list(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     query: OrderQuery,
@@ -263,7 +263,7 @@ pub(crate) async fn list(
 /// The header only, `FOR UPDATE` when `lock`: a write reads its order
 /// locked, so a transition is judged on the status it will change.
 async fn header(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     filter: &str,
@@ -286,7 +286,7 @@ async fn header(
 
 /// The order's status history and its amendments, oldest first, each
 /// amendment with the lines it added and the IDs of those it superseded.
-async fn history(client: &impl GenericClient, order: &mut Order) -> Result<()> {
+async fn history(client: &(impl GenericClient + Sync), order: &mut Order) -> Result<()> {
     order.events = client
         .query(
             &format!("SELECT {EVENT_COLUMNS} FROM supply_chain_purchasing_order_events WHERE order_id=$1 ORDER BY id"),
@@ -348,7 +348,7 @@ async fn history(client: &impl GenericClient, order: &mut Order) -> Result<()> {
 /// One order as `get_order` returns it: header, supplier, current lines with
 /// totals, history and amendments.
 async fn full(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     filter: &str,
@@ -365,7 +365,7 @@ async fn full(
 }
 
 pub(crate) async fn get(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     order_id: i64,
@@ -374,7 +374,7 @@ pub(crate) async fn get(
 }
 
 pub(crate) async fn find_by_number(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     order_number: i64,
@@ -385,7 +385,7 @@ pub(crate) async fn find_by_number(
 /// One current or superseded line of an order of the company, with its
 /// order's facts.
 pub(crate) async fn line_facts(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     line_id: i64,

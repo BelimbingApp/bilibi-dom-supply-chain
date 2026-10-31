@@ -86,7 +86,7 @@ fn validate(input: &NewTaxCode) -> std::result::Result<Valid, Vec<FieldError>> {
     checks.finish().map(|()| valid)
 }
 
-async fn code_taken(client: &impl GenericClient, company_id: i64, code: &str) -> Result<bool> {
+async fn code_taken(client: &(impl GenericClient + Sync), company_id: i64, code: &str) -> Result<bool> {
     Ok(client
         .query_opt(
             "SELECT 1 FROM supply_chain_purchasing_tax_codes WHERE company_id=$1 AND code=$2",
@@ -139,7 +139,7 @@ pub(crate) async fn create(
 }
 
 async fn get(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     tax_code_id: i64,
