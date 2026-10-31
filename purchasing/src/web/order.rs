@@ -300,7 +300,12 @@ impl OrderPage {
             "lines_grid" => self.lines.event(payload),
             "history_grid" => self.history.event(payload),
             "amendments_grid" => self.amendments.event(payload),
-            "clear-flash" => self.flash.clear(payload.get("key").and_then(Value::as_str)),
+            "clear-flash" => {
+                self.flash.clear(payload.get("key").and_then(Value::as_str));
+                if let Some(editor) = &mut self.amendment {
+                    editor.clear_flash(payload);
+                }
+            }
             "dismiss" => self.pending = None,
             "transition" | "confirm" => {
                 let grants = capabilities(&self.core, scope).await?;

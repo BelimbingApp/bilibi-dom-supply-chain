@@ -81,6 +81,9 @@ impl Editor {
             flash: Flash::default(),
         }
     }
+    pub(super) fn clear_flash(&mut self, payload: &Value) {
+        self.flash.clear(payload.get("key").and_then(Value::as_str));
+    }
     fn capture(&mut self, payload: &Value) {
         for key in ["reason", "reference", "notes", "expected_on"] {
             self.input[key] = json!(text(payload, key));
@@ -193,7 +196,7 @@ impl Editor {
                 tone: StatusKind::Warning,
                 ..InstanceBanner::default()
             })?;
-            let preview = &response["results"][0]["preview"];
+            let preview = &response["results"][0]["preview"]["result"];
             let summary = facts(
                 "amend-review-summary",
                 &json!({
@@ -373,10 +376,15 @@ fn preview_errors(response: &Value) -> String {
     let error = &response["results"][0]["error"];
     if let Some(fields) = error["fields"].as_object() {
         return fields
-            .values()
-            .filter_map(Value::as_array)
-            .flatten()
-            .filter_map(Value::as_str)
+            .iter()
+            .flat_map(|(field, messages)| {
+                messages
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .map(move |message| format!("{}: {message}", field.replace('_', " ")))
+            })
             .collect::<Vec<_>>()
             .join(" ");
     }
