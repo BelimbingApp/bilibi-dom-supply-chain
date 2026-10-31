@@ -286,7 +286,7 @@ impl Receiving {
 }
 
 async fn authorize(
-    c: &impl GenericClient,
+    c: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     cap: &str,

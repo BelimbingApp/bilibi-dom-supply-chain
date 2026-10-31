@@ -1187,7 +1187,7 @@ impl Purchasing {
 
 /// Bilimbi `authorize/3` through Core Company's `authorize_company_target`.
 async fn authorize(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     capability: &str,
