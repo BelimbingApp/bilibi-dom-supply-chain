@@ -91,6 +91,22 @@ async fn main() -> Result<()> {
     let modules = bilibi_module_registry::discover()?;
     let mut services = Services::default();
     services.provide("bootstrap.database", Arc::new(db.clone()))?;
+    services.provide(
+        "bootstrap.composition",
+        Arc::new(bilibi_module_registry::Composition {
+            version: env!("CARGO_PKG_VERSION"),
+            commit: None,
+            tag: None,
+            pin: bilibi_module_registry::PinState::Unpinned,
+            containers: vec![bilibi_module_registry::Container {
+                layer: bilibi_module_registry::Layer::Domains,
+                id: "supply_chain",
+                modules: bilibi_domains::MODULES.to_vec(),
+                commit: None,
+                version: None,
+            }],
+        }),
+    )?;
     services.install(&modules)?;
     services
         .get::<bilibi_base::step_up::StepUp>(bilibi_base::step_up::SERVICE)?
