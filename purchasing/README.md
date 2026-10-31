@@ -244,7 +244,7 @@ migration; an applied file is never edited.
 
 ## Order events v1
 
-Purchasing declares three Base event types. Each facade write records its events on the same `MutationTransaction`, under the writable company and order locks; order rows, history, amendments, audit and outbox commit or roll back together. This includes the reviewed agent amendment operation and Receiving's caller-owned receipt transactions. Publication failures forbid commit even if a caller catches the error. The publisher has no Finance dependency, subscriber or cross-domain call.
+Purchasing declares three Base event types. Each facade write records its events on the same `MutationTransaction`, under the writable company and order locks; order rows, history, amendments, audit and outbox commit or roll back together. This includes the reviewed amendment operation and Receiving's caller-owned receipt transactions. Publication failures forbid commit even if a caller catches the error. The publisher has no Finance dependency, subscriber or cross-domain call.
 
 | Event name | When recorded |
 | --- | --- |
