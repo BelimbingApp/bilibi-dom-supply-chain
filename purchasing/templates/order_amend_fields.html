@@ -1,0 +1,8 @@
+{% import "forms.html" as forms %}
+{% call forms::field_row(fields=headers) %}{% endcall %}
+{% for (title, fields, remove) in lines %}
+{% call forms::section(labelledby=title, heading=title) %}
+{% call forms::field_row(fields=fields, columns=3) %}{% endcall %}
+{{ remove }}
+{% endcall %}
+{% endfor %}

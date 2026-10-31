@@ -1,6 +1,6 @@
-//! Headless reach for Bilimbi `Purchasing.amend_order/4`. The agent protocol
+//! Shared reviewed reach for Bilimbi `Purchasing.amend_order/4`. The agent protocol
 //! mirrors Bilimbi `AgentAPI`: review first, then commit through the facade
-//! on the plan's audited transaction. No new page or endpoint.
+//! on the plan's audited transaction. The order page and agent doors use this same operation.
 use crate::{
     order_changes, orders, NewOrderLine, Order, OrderAmendment, Outcome, Purchasing, Refusal,
     MANAGE_ORDERS, MODULE,
@@ -21,6 +21,8 @@ use std::{
 
 // Static handlers have no service argument. Bind the installed Events service
 // once at boot (Core Company's pattern), never a pool or a second transaction.
+pub(crate) const AMEND: &str = "supply_chain.purchasing.order.amend";
+
 static EVENTS: OnceLock<Arc<Events>> = OnceLock::new();
 pub(crate) fn bind(events: Arc<Events>) -> bilibi_module_registry::Result<()> {
     EVENTS.set(events).map_err(|_| {
@@ -252,7 +254,7 @@ fn schema() -> Value {
 
 inventory::submit! { Contribution::new(DEFINITIONS, "supply_chain/purchasing.agent", Provenance { module: MODULE, source: file!(), line: line!() }, &Definitions {
     operations: &[Operation {
-        key: "supply_chain.purchasing.order.amend", title: "Amend a purchase order",
+        key: AMEND, title: "Amend a purchase order",
         summary: "Amend an approved or sent purchase order with a reason and complete replacement lines. Changed lines require fresh approval and sending.",
         keywords: &["purchase", "order", "amend", "amendment", "supplier"],
         capability: MANAGE_ORDERS, input: schema,
@@ -264,7 +266,7 @@ inventory::submit! { Contribution::new(DEFINITIONS, "supply_chain/purchasing.age
     }],
     guides: &[Guide {
         key: "supply_chain.purchasing.order", title: "Purchase order amendments",
-        summary: "Review and commit amendments without changing the purchase order UI.",
+        summary: "Review and commit amendments from the purchase order page or an agent.",
         keywords: &["purchase", "order", "amendment", "approval"], capability: MANAGE_ORDERS,
         body: "Use supply_chain.purchasing.order.amend only for approved or sent orders. Supply company_id, order_id, the current expected_amendment_count, a reason and every replacement line. Never infer company wording, currency, units or tax codes. Quantities and unit prices are exact decimal strings. Optional reference, notes and expected_on preserve their current values when omitted; blank clears them. Omitting a line's tax_code_id removes tax. Supplier, currency and request link cannot change.\n\nPreview a plan through /api/v1 or /mcp and obtain the person's consent to the full review before committing its single-use plan code. Direct calls do not write. The review shows normalized header facts, current line identities, resolved tax rates, replacement lines and whether fresh approval is required. Every amendment supersedes all current lines, even when their values are unchanged. Changing any line's description, item reference, quantity, unit, price or tax returns the order to submitted, clears approval and sending, and makes the amender the submitter; someone else approves it. Header-only changes preserve approved/sent status.\n\nPreview is not a reservation: order, tax, company or permission changes can require a fresh review. Do not put two amendments to the same order in one plan: the count precondition refuses the second and rolls back the whole plan. Partially received orders cannot be amended; close them short instead. Refusals change nothing.",
     }],
