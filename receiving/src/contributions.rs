@@ -82,19 +82,19 @@ inventory::submit! {
 }
 
 inventory::submit! {
-    Contribution::new(ROUTES, "supply_chain/receiving.receipts", provenance!(), &Route {
+    Contribution::new(ROUTES, "supply_chain/receiving.receipts", provenance!(), &Route { company_scope: bilibi_module_registry::contributions::CompanyScope::Company,
         method: Method::Get, path: RECEIPTS_PATH, service: PAGES, operation: "receipts",
         access: Access::Capability(VIEW), framed: true,
     })
 }
 inventory::submit! {
-    Contribution::new(ROUTES, "supply_chain/receiving.receive", provenance!(), &Route {
+    Contribution::new(ROUTES, "supply_chain/receiving.receive", provenance!(), &Route { company_scope: bilibi_module_registry::contributions::CompanyScope::Company,
         method: Method::Get, path: RECEIVE_PATH, service: PAGES, operation: "receive",
         access: Access::Capability(VIEW), framed: true,
     })
 }
 inventory::submit! {
-    Contribution::new(ROUTES, "supply_chain/receiving.receipt", provenance!(), &Route {
+    Contribution::new(ROUTES, "supply_chain/receiving.receipt", provenance!(), &Route { company_scope: bilibi_module_registry::contributions::CompanyScope::Company,
         method: Method::Get, path: "/supply-chain/receipts/{id}", service: PAGES, operation: "receipt",
         access: Access::Capability(VIEW), framed: true,
     })
@@ -103,7 +103,7 @@ inventory::submit! {
 // The "supply_chain" root is Purchasing's, a declared dependency.
 bilibi_menu::contribute!(
     "supply_chain/receiving",
-    MenuItem::page("supply_chain.receipts", "Goods receipts", RECEIPTS_PATH)
+    MenuItem::page("supply_chain.receipts", "Goods receipts", RECEIPTS_PATH).company_scoped()
         .under("supply_chain")
         .requires(Requirement::Capability(VIEW))
         .order(25)

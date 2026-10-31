@@ -52,7 +52,7 @@ Each posting records one event **per line**, in line-number order, inside the bu
 
 ## Pages and menu
 
-The Goods receipts menu item (`supply_chain.receipts`, order 25) sits under Purchasing's Supply chain root for accounts holding `supply-chain.receiving.view`. Service `supply_chain/receiving.pages` serves three framed live pages, each behind that capability. It declares their live-event writes as a `Pending::Every` page-write allowance (Bilibi `apps/base/agent_api/README.md`), because they write through the facade rather than an operation contract. They work in the signed-in account's own company, read each write's capability again on every write-shaped event, and the facade checks it once more; a refusal or a lost grant is a flash with Bilimbi's sentence (`Refusal::text`), never a cleared page.
+The Goods receipts menu item (`supply_chain.receipts`, order 25) sits under Purchasing's Supply chain root for accounts holding `supply-chain.receiving.view`. Service `supply_chain/receiving.pages` serves three framed live pages, each behind that capability. It declares their live-event writes as a `Pending::Every` page-write allowance (Bilibi `apps/base/agent_api/README.md`), because they write through the facade rather than an operation contract. They work in the session's selected workplace, read each write's capability again on every write-shaped event, and the facade checks it once more; a refusal or a lost grant is a flash with Bilimbi's sentence (`Refusal::text`), never a cleared page.
 
 | Page | Path | Bilimbi | Does |
 | --- | --- | --- | --- |
@@ -71,3 +71,5 @@ The Goods receipts menu item (`supply_chain.receipts`, order 25) sits under Purc
 Receipt forms retain every submitted line and pass complete text and tolerance values to the facade for validation; a page never saves a shortened number or silently omits oversized optional text. The line grid scrolls within the form at phone widths. The walkthrough leaves an additional sent order with 200 lines (`SU1 large receipt`) to verify browser submission beyond 512 controls without omitting lines.
 
 Run the disposable walkthrough with `BILIBI_ENV=development`; it applies the same documented development step-up setting as the web host when assigning fixture roles. Other environments keep the Platform enforcement. This affects only the example crate.
+
+All routes and menu pages declare company scope. Switching desks reloads their lists for the selected workplace; every operation rechecks desk access and its existing capability.

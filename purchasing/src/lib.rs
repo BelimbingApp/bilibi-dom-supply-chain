@@ -9,7 +9,7 @@
 //! [`Scope`] it was handed and an explicit company ID. Reads authorize
 //! [`VIEW`] and writes their own capability for the scope's actor and the
 //! target company at the moment they run (Core Company's
-//! `authorize_target`: the actor's own company, or a sibling company with
+//! `authorize_work_target`: the actor's own company, or a sibling company with
 //! tenant-wide reach), so a missing grant is `Error::Forbidden` and a
 //! company the scope cannot see is `Error::NotFound`. A write then holds the
 //! company's writable lock inside its audited mutation transaction, so an
@@ -1192,7 +1192,7 @@ async fn authorize(
     company_id: i64,
     capability: &str,
 ) -> Result<()> {
-    bilibi_company::authorize_target(client, scope, company_id, capability)
+    bilibi_company::authorize_work_target(client, scope, company_id, capability)
         .await
         .map(|_| ())
 }

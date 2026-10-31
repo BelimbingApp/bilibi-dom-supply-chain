@@ -115,8 +115,17 @@ impl Purchasing {
         input: &Value,
     ) -> bilibi_agent_api::Result<Value> {
         let company_id = integer(input, "company_id")?;
-        // Company's object-safe equivalent of authorize_target, on this same
+        // Company's object-safe equivalent of authorize_work_target, on this same
         // connection. No pool/global binding and no extra VIEW capability.
+        if scope.principal().is_none()
+            && !bilibi_company::reachable(
+                client,
+                scope,
+                company_id.try_into().map_err(|_| bilibi_database::Error::Invalid)?,
+            ).await?
+        {
+            return Err(bilibi_database::Error::Forbidden.into());
+        }
         bilibi_company::Directory
             .target(
                 client,

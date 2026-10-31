@@ -291,7 +291,7 @@ async fn authorize(
     company_id: i64,
     cap: &str,
 ) -> Result<()> {
-    bilibi_company::authorize_target(c, scope, company_id, cap)
+    bilibi_company::authorize_work_target(c, scope, company_id, cap)
         .await
         .map(|_| ())
 }

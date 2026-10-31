@@ -67,9 +67,7 @@ missing grant is `Error::Forbidden`; a company the scope cannot see is
 
 Every call authorizes its capability for the scope's signed-in actor and the
 target company when it runs, through Core Company's
-`bilibi_company::authorize_target` (Bilimbi `authorize_company_target/3`): the
-actor's own company, or a sibling company with Core Company's tenant-wide
-reach. Writes then take `bilibi_company::require_writable` with the row lock
+`bilibi_company::authorize_work_target` (Bilimbi `authorize_company_target/3`): an explicit staff desk in that company. Company-record management alone grants no workplace access. Writes then take `bilibi_company::require_writable` with the row lock
 inside their mutation transaction, so an archived company is refused and one
 company's purchasing writes run one at a time; that lock is also what makes
 a code unique without a race and, later, keeps a supplier from being
@@ -304,7 +302,7 @@ Preview validates the same rules as commit without business mutations and shows 
 
 Commit uses the plan's `MutationTransaction`, reauthorizes through Core Company, locks the writable company and order, and captures all changes through the existing facade. Plan revalidation detects changed order or tax facts and revoked grants. `expected_amendment_count` is checked again under lock, so two amendments to the same order in one plan refuse the second and roll back the whole plan, including audit and code consumption. Use separate reviewed plans instead. Invalid values and business refusals retain the facade's text in field errors (line paths are zero-based, such as `lines.0.quantity`); missing orders return `not_found` and stale counts return `stale_plan`.
 
-Platform limitation: `OperationClient` cannot enter the generic Company writable guard. Preview authorizes with Company's equivalent object-safe `bilibi_company::Directory::target`, then takes a tenant-scoped company row lock on the supplied plan connection and checks the locked status. This avoids a second pool connection and keeps reference facts locked through commit revalidation and execution. Commit uses `authorize_target` and `require_writable` normally. An object-safe Company writable guard would remove the narrow preview SQL workaround; no Platform code is changed here.
+Platform limitation: `OperationClient` cannot enter the generic Company writable guard. Preview first proves explicit desk access with `bilibi_company::reachable`, then authorizes with Company's object-safe `bilibi_company::Directory::target`, then takes a tenant-scoped company row lock on the supplied plan connection and checks the locked status. This avoids a second pool connection and keeps reference facts locked through commit revalidation and execution. Commit uses `authorize_work_target` and `require_writable` normally. An object-safe Company writable guard would remove the narrow preview SQL workaround; no Platform code is changed here.
 
 `fixtures/walkthrough` exercises the real registry and plan services with authenticated sessions: manage without view, direct-write refusal, mutation-free preview, header-only and changed-line commits, sent-order amendments, replay, duplicate-order atomic rollback, tax drift, grant revocation and field errors. It prints no credentials or plan codes and creates records only through the facades in its disposable database.
 
@@ -314,8 +312,7 @@ The Supply chain menu (`supply_chain`, order 55) offers Purchase requests
 (`/supply-chain/purchase-requests`), Purchase orders
 (`/supply-chain/purchase-orders`) and Suppliers (`/supply-chain/suppliers`)
 to accounts holding `supply-chain.purchasing.view`; the root stays hidden
-from everyone else. Amendments have no editor, as in Bilimbi; recorded amendments appear on the order detail. The module contributes all four pages through service `supply_chain/purchasing.pages`, each behind `supply-chain.purchasing.view`, and declares their live-event writes as a `Pending::Every` page-write allowance (Bilibi `apps/base/agent_api/README.md`): they write through the facade, and the amendment contract has no page caller. The pages work in the signed-in account's own company (its
-affiliation), read each write's capability again on every write-shaped
+from everyone else. Amendments have no editor, as in Bilimbi; recorded amendments appear on the order detail. The module contributes all four pages through service `supply_chain/purchasing.pages`, each behind `supply-chain.purchasing.view`, and declares their live-event writes as a `Pending::Every` page-write allowance (Bilibi `apps/base/agent_api/README.md`): they write through the facade, and the amendment contract has no page caller. The pages work in the session's selected workplace (`Scope::current_company()`), read each write's capability again on every write-shaped
 event, and the facade checks it once more; a refusal or a lost grant is a
 flash with Bilimbi's sentence, never a cleared page.
 
@@ -342,3 +339,5 @@ flash with Bilimbi's sentence, never a cleared page.
 - **Purchase order** (Bilimbi `OrderLive`): header and facts, current lines and received quantities, totals, history with actors and policy-formatted timestamps, and recorded amendments with added/replaced line counts. Lines, history and amendments use FlexTables with independent `lines_`, `history_` and `amendments_` sort query names, column settings and compact mode. Draft orders offer Submit; submitted orders offer Approve and, before any amendment, Return to draft; approved orders offer Mark as sent; sent and partially received orders offer Close. Nonfinal orders offer Cancel; the facade refuses cancellation after receipts. Every transition waits for a server-held confirmation and rechecks its capability when confirmed. Terminal orders retain their history and show the final-status sentence; readers without either write capability see the withheld-control sentence. Missing or other-company records show the unavailable state. Record links and detail announcements support workspace following.
 
 Form text reaches the facade intact: its limits count Unicode codepoints, so a valid multibyte justification or description must not be dropped by a byte limit in the page. Oversized optional fields receive the same refusal as facade calls. Draft line grids scroll within the form at phone widths.
+
+All routes and menu pages declare company scope. Switching desks reloads their lists for the selected workplace; every operation rechecks desk access and its existing capability.
