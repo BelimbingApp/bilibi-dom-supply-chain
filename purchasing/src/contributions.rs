@@ -156,13 +156,13 @@ inventory::submit! {
 }
 
 inventory::submit! {
-    Contribution::new(ROUTES, "supply_chain/purchasing.suppliers", provenance!(), &Route {
+    Contribution::new(ROUTES, "supply_chain/purchasing.suppliers", provenance!(), &Route { company_scope: bilibi_module_registry::contributions::CompanyScope::Company,
         method: Method::Get, path: SUPPLIERS_PATH, service: PAGES, operation: "suppliers",
         access: Access::Capability(VIEW), framed: true,
     })
 }
 inventory::submit! {
-    Contribution::new(ROUTES, "supply_chain/purchasing.requests", provenance!(), &Route {
+    Contribution::new(ROUTES, "supply_chain/purchasing.requests", provenance!(), &Route { company_scope: bilibi_module_registry::contributions::CompanyScope::Company,
         method: Method::Get, path: REQUESTS_PATH, service: PAGES, operation: "requests",
         access: Access::Capability(VIEW), framed: true,
     })
@@ -182,6 +182,7 @@ bilibi_menu::contribute!(
         "Purchase requests",
         REQUESTS_PATH
     )
+    .company_scoped()
     .under("supply_chain")
     .requires(Requirement::Capability(VIEW))
     .order(10)
@@ -193,6 +194,7 @@ bilibi_menu::contribute!(
         "Purchase orders",
         "/supply-chain/purchase-orders"
     )
+    .company_scoped()
     .under("supply_chain")
     .requires(Requirement::Capability(VIEW))
     .order(20)
@@ -200,19 +202,20 @@ bilibi_menu::contribute!(
 bilibi_menu::contribute!(
     "supply_chain/purchasing",
     MenuItem::page("supply_chain.suppliers", "Suppliers", SUPPLIERS_PATH)
+        .company_scoped()
         .under("supply_chain")
         .requires(Requirement::Capability(VIEW))
         .order(30)
 );
 
 inventory::submit! {
-    Contribution::new(ROUTES, "supply_chain/purchasing.orders", provenance!(), &Route {
+    Contribution::new(ROUTES, "supply_chain/purchasing.orders", provenance!(), &Route { company_scope: bilibi_module_registry::contributions::CompanyScope::Company,
         method: Method::Get, path: ORDERS_PATH, service: PAGES, operation: "orders",
         access: Access::Capability(VIEW), framed: true,
     })
 }
 inventory::submit! {
-    Contribution::new(ROUTES, "supply_chain/purchasing.order", provenance!(), &Route {
+    Contribution::new(ROUTES, "supply_chain/purchasing.order", provenance!(), &Route { company_scope: bilibi_module_registry::contributions::CompanyScope::Company,
         method: Method::Get, path: "/supply-chain/purchase-orders/{id}", service: PAGES, operation: "order",
         access: Access::Capability(VIEW), framed: true,
     })

@@ -101,7 +101,7 @@ fn event_json(request_id: i64, event: &RequestEvent) -> Value {
     })
 }
 
-async fn lines(client: &impl GenericClient, request_id: i64) -> Result<Vec<RequestLine>> {
+async fn lines(client: &(impl GenericClient + Sync), request_id: i64) -> Result<Vec<RequestLine>> {
     client
         .query(
             &format!("SELECT {LINE_COLUMNS} FROM supply_chain_purchasing_request_lines WHERE request_id=$1 ORDER BY line_number"),
@@ -113,7 +113,10 @@ async fn lines(client: &impl GenericClient, request_id: i64) -> Result<Vec<Reque
         .collect()
 }
 
-async fn events(client: &impl GenericClient, request_id: i64) -> Result<Vec<RequestEvent>> {
+async fn events(
+    client: &(impl GenericClient + Sync),
+    request_id: i64,
+) -> Result<Vec<RequestEvent>> {
     client
         .query(
             &format!("SELECT {EVENT_COLUMNS} FROM supply_chain_purchasing_request_events WHERE request_id=$1 ORDER BY id"),
@@ -126,7 +129,7 @@ async fn events(client: &impl GenericClient, request_id: i64) -> Result<Vec<Requ
 }
 
 pub(crate) async fn list(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     query: RequestQuery,
@@ -172,7 +175,7 @@ pub(crate) async fn list(
 /// The header only, `FOR UPDATE` when `lock`: a write reads its request
 /// locked, so a transition is judged on the status it will change.
 async fn header(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     request_id: i64,
@@ -193,7 +196,7 @@ async fn header(
 }
 
 pub(crate) async fn get(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company_id: i64,
     request_id: i64,

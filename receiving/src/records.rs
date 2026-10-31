@@ -75,7 +75,7 @@ fn event(row: &Row) -> Result<ReceiptEvent> {
 }
 
 async fn load(
-    c: &impl GenericClient,
+    c: &(impl GenericClient + Sync),
     tenant: i64,
     company: i64,
     rows: &[Row],
@@ -116,7 +116,7 @@ async fn load(
 }
 
 pub(crate) async fn get(
-    c: &impl GenericClient,
+    c: &(impl GenericClient + Sync),
     tenant: i64,
     company: i64,
     id: i64,
@@ -135,7 +135,7 @@ pub(crate) async fn locked(
     get(tx.sql(), scope.tenant(), company, id, true).await
 }
 pub(crate) async fn list(
-    c: &impl GenericClient,
+    c: &(impl GenericClient + Sync),
     tenant: i64,
     company: i64,
     query: ReceiptQuery,
@@ -144,7 +144,7 @@ pub(crate) async fn list(
     load(c, tenant, company, &rows, false).await
 }
 pub(crate) async fn postings(
-    c: &impl GenericClient,
+    c: &(impl GenericClient + Sync),
     tenant: i64,
     company: i64,
     query: PostingQuery,
@@ -174,7 +174,7 @@ pub(crate) async fn postings(
 }
 
 pub(crate) async fn settings(
-    c: &impl GenericClient,
+    c: &(impl GenericClient + Sync),
     tenant: i64,
     company: i64,
 ) -> Result<Settings> {
@@ -185,7 +185,7 @@ pub(crate) async fn settings(
 }
 
 pub(crate) async fn summaries(
-    c: &impl GenericClient,
+    c: &(impl GenericClient + Sync),
     tenant: i64,
     company: i64,
     order: Option<i64>,

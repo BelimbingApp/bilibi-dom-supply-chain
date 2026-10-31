@@ -119,7 +119,7 @@ impl Page<Scope, Error> for Pages {
 /// `current_scope.user["company_id"]`). An account with none names no
 /// company, which the facade answers as not found.
 fn company_id(scope: &Scope) -> i64 {
-    scope.actor().organisation().map_or(0, |id| id.get())
+    scope.current_company().map_or(0, |id| id.get())
 }
 
 /// Whether the scope holds `capability` now (Bilimbi `Authz.can/2`).
