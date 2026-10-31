@@ -9,6 +9,7 @@
 //! sentences (`Web.Refusals`), so pages do not word refusals themselves.
 mod lists;
 mod order;
+mod order_amend;
 mod orders;
 mod requests;
 mod suppliers;
@@ -27,6 +28,7 @@ pub(crate) struct Core {
     purchasing: Purchasing,
     display: Arc<bilibi_datetime::DisplayPolicy>,
     locales: Arc<bilibi_locale::Locales>,
+    contracts: Arc<bilibi_agent_api::page::PageContracts>,
 }
 
 pub(crate) struct Pages(Arc<Core>);
@@ -36,12 +38,14 @@ impl Pages {
         purchasing: Purchasing,
         display: Arc<bilibi_datetime::DisplayPolicy>,
         locales: Arc<bilibi_locale::Locales>,
+        contracts: Arc<bilibi_agent_api::page::PageContracts>,
     ) -> Self {
         Self(Arc::new(Core {
             db,
             purchasing,
             display,
             locales,
+            contracts,
         }))
     }
 }

@@ -92,7 +92,7 @@ inventory::submit! {
                         services.get::<Events>(bilibi_events::SERVICE)?,
                     );
                     Ok(Arc::new(PageService::<Scope, bilibi_database::Error>(Arc::new(
-                        crate::web::Pages::new(db, purchasing, services.get::<bilibi_datetime::DisplayPolicy>("base/datetime.display")?, services.get::<bilibi_locale::Locales>("base/locale.locales")?),
+                        crate::web::Pages::new(db, purchasing, services.get::<bilibi_datetime::DisplayPolicy>("base/datetime.display")?, services.get::<bilibi_locale::Locales>("base/locale.locales")?, services.get(bilibi_agent_api::page::SERVICE)?),
                     ))))
                 },
             },
@@ -138,7 +138,7 @@ inventory::submit! {
 }
 
 /// The registry service ID of the module's pages.
-const PAGES: &str = "supply_chain/purchasing.pages";
+pub(crate) const PAGES: &str = "supply_chain/purchasing.pages";
 /// The page paths, Bilimbi's `priv/web_routes.exs` verbatim.
 pub(crate) const SUPPLIERS_PATH: &str = "/supply-chain/suppliers";
 pub(crate) const ORDERS_PATH: &str = "/supply-chain/purchase-orders";
@@ -150,8 +150,8 @@ pub(crate) const REQUESTS_PATH: &str = "/supply-chain/purchase-requests";
 // from a page service that declares none.
 inventory::submit! {
     Contribution::new(PAGE_WRITES, PAGES, provenance!(), &PageWrites {
-        service: PAGES, contracts: &[],
-        pending: Pending::Every { reason: "Suppliers, tax codes, purchase requests and purchase order lifecycle actions write through the Purchasing facade; the one contract, supply_chain.purchasing.order.amend, has no page caller." },
+        service: PAGES, contracts: &[("amend_review", crate::agent_operations::AMEND), ("amend_commit", crate::agent_operations::AMEND)],
+        pending: Pending::Every { reason: "Suppliers, tax codes, purchase requests and purchase order lifecycle actions write through the Purchasing facade. Order amendments call supply_chain.purchasing.order.amend." },
     })
 }
 

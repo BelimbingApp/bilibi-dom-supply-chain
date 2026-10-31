@@ -132,6 +132,7 @@ struct View<'a> {
     amendments: Html,
     dialog: Html,
     missing: Html,
+    amendment_editor: Html,
 }
 #[derive(Template)]
 #[template(path = "order_actions.html")]
@@ -176,6 +177,7 @@ pub(super) struct OrderPage {
     can_manage: bool,
     can_approve: bool,
     pending: Option<Pending>,
+    amendment: Option<super::order_amend::Editor>,
     flash: Flash,
     lines: Grid,
     history: Grid,
@@ -195,6 +197,7 @@ impl OrderPage {
             can_manage: false,
             can_approve: false,
             pending: None,
+            amendment: None,
             flash: Flash::default(),
             lines: Grid::new(
                 "order-lines-table",
@@ -284,6 +287,7 @@ impl OrderPage {
                 .load(&o.amendments, |a| a.id.to_string());
         } else {
             self.pending = None;
+            self.amendment = None;
         }
         Ok(())
     }
@@ -292,7 +296,12 @@ impl OrderPage {
             "lines_grid" => self.lines.event(payload),
             "history_grid" => self.history.event(payload),
             "amendments_grid" => self.amendments.event(payload),
-            "clear-flash" => self.flash.clear(payload.get("key").and_then(Value::as_str)),
+            "clear-flash" => {
+                self.flash.clear(payload.get("key").and_then(Value::as_str));
+                if let Some(editor) = &mut self.amendment {
+                    editor.clear_flash(payload);
+                }
+            }
             "dismiss" => self.pending = None,
             "transition" | "confirm" => {
                 let grants = capabilities(&self.core, scope).await?;
@@ -377,6 +386,14 @@ impl OrderPage {
         };
         let mut buttons = vec![];
         let mut forms = vec![];
+        if self.can_manage && matches!(o.status, OrderStatus::Approved | OrderStatus::Sent) {
+            buttons.push(render(&Button {
+                id: "order-amend",
+                event: "amend_open",
+                body: Html::text("Amend"),
+                ..Button::default()
+            })?);
+        }
         let mut add =
             |id: &'static str, label: &str, action: Action, reason_label: &str| -> Result<()> {
                 forms.push(ActionForm {
@@ -489,6 +506,10 @@ impl OrderPage {
             history: Html::EMPTY,
             amendments: Html::EMPTY,
             dialog: Html::EMPTY,
+            amendment_editor: match &self.amendment {
+                Some(editor) => editor.render()?,
+                None => Html::EMPTY,
+            },
             missing: render(
                 &EmptyState::missing(
                     "This purchase order is not available.",
@@ -686,6 +707,39 @@ impl LiveState<Scope, Error> for OrderPage {
                             .map_err(|_| Error::Internal)?;
                     }
                     self.pending = None;
+                    self.amendment = None;
+                    true
+                }
+                LiveInput::Event(p) if text(p, "type").starts_with("amend_") => {
+                    let grants = capabilities(&self.core, request.scope).await?;
+                    if !grants.contains(MANAGE_ORDERS) {
+                        self.amendment = None;
+                        self.flash.error(DENIED);
+                    } else if text(p, "type") == "amend_cancel" {
+                        self.amendment = None;
+                    } else if text(p, "type") == "amend_open" {
+                        self.pending = None;
+                        if let Some(o) = &self.order {
+                            let taxes = self
+                                .core
+                                .purchasing
+                                .list_tax_codes(request.scope, company_id(request.scope), false)
+                                .await?;
+                            self.amendment = Some(super::order_amend::Editor::new(
+                                company_id(request.scope),
+                                o,
+                                taxes,
+                            ));
+                        }
+                    } else if let Some(editor) = &mut self.amendment {
+                        if editor
+                            .event(&self.core, request.scope, request.credential, p)
+                            .await?
+                        {
+                            self.amendment = None;
+                            self.flash.success("Order amended.");
+                        }
+                    }
                     true
                 }
                 LiveInput::Event(p) => self.event(request.scope, p).await?,

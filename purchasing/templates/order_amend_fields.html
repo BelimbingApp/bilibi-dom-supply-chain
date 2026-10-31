@@ -1,0 +1,9 @@
+{% import "forms.html" as forms %}
+{% call forms::field_row(fields=headers) %}{% endcall %}
+{% for (title, fields, remove) in lines %}
+{% let heading_id = "amend-line-{}"|format(loop.index) %}
+{% call forms::section(labelledby=heading_id, heading=title) %}
+{% call forms::field_row(fields=fields, columns=3) %}{% endcall %}
+{{ remove }}
+{% endcall %}
+{% endfor %}
