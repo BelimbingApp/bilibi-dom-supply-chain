@@ -94,7 +94,11 @@ impl Editor {
             for (key, _) in LINE_FIELDS {
                 let value = text(payload, &format!("line_{index}_{key}"));
                 line[key] = if key == "tax_code_id" {
-                    params_id(value).map_or(Value::Null, |id| json!(id))
+                    if value.is_empty() {
+                        Value::Null
+                    } else {
+                        params_id(value).map_or_else(|| json!(value), |id| json!(id))
+                    }
                 } else {
                     json!(value)
                 };

@@ -291,6 +291,7 @@ impl OrderPage {
                 .load(&o.amendments, |a| a.id.to_string());
         } else {
             self.pending = None;
+            self.amendment = None;
         }
         Ok(())
     }
