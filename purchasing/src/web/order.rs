@@ -701,6 +701,7 @@ impl LiveState<Scope, Error> for OrderPage {
                             .map_err(|_| Error::Internal)?;
                     }
                     self.pending = None;
+                    self.amendment = None;
                     true
                 }
                 LiveInput::Event(p) if text(p, "type").starts_with("amend_") => {
@@ -716,9 +717,13 @@ impl LiveState<Scope, Error> for OrderPage {
                             let taxes = self
                                 .core
                                 .purchasing
-                                .list_tax_codes(request.scope, o.company_id, false)
+                                .list_tax_codes(request.scope, company_id(request.scope), false)
                                 .await?;
-                            self.amendment = Some(super::order_amend::Editor::new(o, taxes));
+                            self.amendment = Some(super::order_amend::Editor::new(
+                                company_id(request.scope),
+                                o,
+                                taxes,
+                            ));
                         }
                     } else if let Some(editor) = &mut self.amendment {
                         if editor

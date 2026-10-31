@@ -66,9 +66,9 @@ fn button(label: &str, event: &str, submit: bool, value: &str) -> Result<Html> {
     })
 }
 impl Editor {
-    pub(super) fn new(order: &Order, taxes: Vec<TaxCode>) -> Self {
+    pub(super) fn new(company_id: i64, order: &Order, taxes: Vec<TaxCode>) -> Self {
         Self {
-            input: json!({"company_id":order.company_id,"order_id":order.id,
+            input: json!({"company_id":company_id,"order_id":order.id,
                 "expected_amendment_count":order.amendment_count,"reason":"",
                 "reference":order.reference.as_deref().unwrap_or_default(),
                 "notes":order.notes.as_deref().unwrap_or_default(),
