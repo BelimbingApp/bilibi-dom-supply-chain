@@ -294,7 +294,7 @@ All three use version **1** and subject **`order:<order_id>`**. The Base envelop
 
 ## Reviewed agent amendment
 
-`supply_chain.purchasing.order.amend` exposes `amend_order` through the Platform's `/api/v1` and `/mcp` plan protocol, under `supply-chain.purchasing.orders.manage`; neither `view` nor `orders.approve` is required. Describe the operation and read guide `supply_chain.purchasing.order` before constructing a plan. Direct operation calls never write. No amendment page is added. The contract serves every door (`channels: every`) and lists no step-up (`step_up: []`): Supply Chain declares no Base Step-up operation, as Bilimbi has none.
+`supply_chain.purchasing.order.amend` exposes `amend_order` through the Platform's `/api/v1` and `/mcp` plan protocol, under `supply-chain.purchasing.orders.manage`; neither `view` nor `orders.approve` is required. Describe the operation and read guide `supply_chain.purchasing.order` before constructing a plan. Direct operation calls never write. The order record page calls this same contract for its amendment form. The contract serves every door (`channels: every`) and lists no step-up (`step_up: []`): Supply Chain declares no Base Step-up operation, as Bilimbi has none.
 
 Required input is `company_id`, `order_id`, `expected_amendment_count` (the order's current count, initially 0), `reason` and the complete replacement `lines`. Each line requires `description`, `quantity`, `unit` and `unit_price`, with optional `external_item_ref` and `tax_code_id`. Decimals are strings, not JSON numbers; the facade validates precision and bounds. Omitted line tax means no tax. Optional `reference`, `notes` and `expected_on` preserve current values when omitted and clear them when blank; dates are `YYYY-MM-DD`. Unknown fields and `null` inputs are refused. Supplier, currency, request link, actors, line identities and received quantities cannot be supplied.
 
@@ -312,7 +312,7 @@ The Supply chain menu (`supply_chain`, order 55) offers Purchase requests
 (`/supply-chain/purchase-requests`), Purchase orders
 (`/supply-chain/purchase-orders`) and Suppliers (`/supply-chain/suppliers`)
 to accounts holding `supply-chain.purchasing.view`; the root stays hidden
-from everyone else. Amendments have no editor, as in Bilimbi; recorded amendments appear on the order detail. The module contributes all four pages through service `supply_chain/purchasing.pages`, each behind `supply-chain.purchasing.view`, and declares their live-event writes as a `Pending::Every` page-write allowance (Bilibi `apps/base/agent_api/README.md`): they write through the facade, and the amendment contract has no page caller. The pages work in the session's selected workplace (`Scope::current_company()`), read each write's capability again on every write-shaped
+from everyone else. Approved and sent orders offer **Amend** on the order detail. The module contributes all four pages through service `supply_chain/purchasing.pages`, each behind `supply-chain.purchasing.view`, and declares `amend_review` and `amend_commit` against `supply_chain.purchasing.order.amend` (Bilibi `apps/base/agent_api/README.md`). Other Purchasing writes retain their `Pending::Every` facade allowance. The pages work in the session's selected workplace (`Scope::current_company()`), read each write's capability again on every write-shaped
 event, and the facade checks it once more; a refusal or a lost grant is a
 flash with Bilimbi's sentence, never a cleared page.
 
@@ -341,3 +341,19 @@ flash with Bilimbi's sentence, never a cleared page.
 Form text reaches the facade intact: its limits count Unicode codepoints, so a valid multibyte justification or description must not be dropped by a byte limit in the page. Oversized optional fields receive the same refusal as facade calls. Draft line grids scroll within the form at phone widths.
 
 All routes and menu pages declare company scope. Switching desks reloads their lists for the selected workplace; every operation rechecks desk access and its existing capability.
+
+### Amend an order on its record page
+
+Open an approved or sent purchase order and choose **Amend**. The form starts with its current supplier reference, expected delivery, notes and every current line. Enter a reason, change the headers or lines, and use **Add line** or **Remove line** as needed. No five-line limit is imposed. Supplier, currency and the request link stay fixed.
+
+Choose **Review amendment** to see the current and proposed order, resolved tax rates, replacement lines, review expiry and whether fresh approval and sending are required. **Confirm amendment** commits exactly that review; **Back to changes** discards the review so the edited form must be reviewed again. **Cancel**, Escape and closing the dialog discard the editor without changing the order. An expired or stale review requires a new amendment; a refused write preserves the form and changes no business records.
+
+The page calls `PageContracts::preview` and `PageContracts::commit` for `supply_chain.purchasing.order.amend`, using the live browser credential. It retains the input and single-use plan code on the server; neither is reconstructed from confirmation payloads. The same operation handles agent plans through `/api/v1` and `/mcp`, including capability checks, company locking, amendment-count and reference-fact fences, audit, history and events. The page adds no amendment route or menu item. Requests, orders and receipts remain separate records.
+
+For browser and agent proof, start a mounted Platform with `./bilibi start` against an empty disposable database, then run the following against that same database with the launcher's development keys available:
+
+```sh
+BILIBI_AMENDMENT_PROOF=disposable cargo run -p bilibi-supply-chain-walkthrough --bin amendment-page
+```
+
+This fixture uses the launcher's `ai@agent.my` administrator, creates a second approver through User's account service, and leaves an approved six-line order for browser checks. It also proves the amendment operation refuses a direct write, previews without changing the order, commits a header-only amendment with all six lines, and refuses replay. Open its printed order path as `ai@agent.my` / `bilibi-dev`; check a missing-reason refusal, cancel an edited draft and a review, then confirm a header amendment. Change a line in a second amendment to verify that the order returns to submitted for someone else to approve. Never run the fixture against a database you intend to keep.

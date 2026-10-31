@@ -7,9 +7,8 @@ use bilibi_agent_api::{page::Call, Error as OperationError};
 use bilibi_database::{Error, Result};
 use bilibi_tenancy::Scope;
 use bilibi_ui::{
-    BuiltinColumn, Button, ButtonVariant, Choice, Fact, Facts, Field, FlashMap, FlexRow, FlexTable,
-    Form, Html, InputKind, InstanceBanner, ListColumns, Modal, ModalWidth, SectionHeading,
-    StatusKind,
+    BuiltinColumn, Button, ButtonVariant, Choice, Fact, Facts, Field, FlexRow, FlexTable, Form,
+    Html, InputKind, InstanceBanner, ListColumns, Modal, ModalWidth, SectionHeading, StatusKind,
 };
 use serde_json::{json, Value};
 
@@ -40,8 +39,7 @@ struct Fields {
 }
 #[derive(Template)]
 #[template(path = "order_amend_body.html")]
-struct Body<'a> {
-    flash: FlashMap<'a>,
+struct Body {
     parts: Vec<Html>,
 }
 #[derive(Template)]
@@ -306,10 +304,8 @@ impl Editor {
             width: ModalWidth::Wide,
             description:
                 "Every current line is replaced. Changed lines require fresh approval and sending.",
-            body: render(&Body {
-                flash: self.flash.map(),
-                parts,
-            })?,
+            flash: Some(self.flash.map()),
+            body: render(&Body { parts })?,
             ..Modal::default()
         })
     }

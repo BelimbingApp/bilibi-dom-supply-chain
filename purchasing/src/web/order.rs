@@ -2,7 +2,7 @@
 //! retain their action and reason on the server until the dialog answers.
 use super::lists::{columns, sort, table, TwoLineCell};
 use super::orders::{badge, label, supplier};
-use super::{capabilities, company_id, outcome, render, text, Core, Flash};
+use super::{capabilities, outcome, render, text, Core, Flash};
 use crate::{Order, OrderStatus, APPROVE_ORDERS, MANAGE_ORDERS};
 use askama::Template;
 use bilibi_database::{Error, Result};
@@ -17,6 +17,10 @@ use bilibi_ui::{
 };
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc, time::SystemTime};
+
+fn company_id(scope: &Scope) -> i64 {
+    scope.current_company().map_or(0, |id| id.get())
+}
 
 const DENIED: &str = "You do not have permission to change purchase orders.";
 const ORDERS_PATH: &str = "/supply-chain/purchase-orders";

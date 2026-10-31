@@ -152,6 +152,7 @@ async fn main() -> Result<()> {
                 code: "AMEND-TAX".into(),
                 name: "Proof tax".into(),
                 rate: "10".into(),
+                ..NewTaxCode::default()
             },
         )
         .await?,

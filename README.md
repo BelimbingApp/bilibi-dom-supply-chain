@@ -40,7 +40,7 @@ After migrating, the Supply chain menu offers Purchase requests, Purchase
 orders and Suppliers to accounts holding `supply-chain.purchasing.view`; the
 Tenant Owner role holds every Purchasing capability.
 
-Approved or sent orders can be amended through the reviewed agent operation `supply_chain.purchasing.order.amend` on `/api/v1` and `/mcp`. It uses the existing facade, requires `supply-chain.purchasing.orders.manage`, and adds no page. The [operation contract](purchasing/README.md#reviewed-agent-amendment) documents replacement lines, the current amendment-count precondition, preview/commit, reapproval and refusals.
+Approved or sent orders can be amended through the reviewed agent operation `supply_chain.purchasing.order.amend` on `/api/v1` and `/mcp`. It uses the existing facade, requires `supply-chain.purchasing.orders.manage`, and is also called by the order detail’s Amend action. The [operation contract](purchasing/README.md#reviewed-agent-amendment) documents replacement lines, the current amendment-count precondition, preview/commit, reapproval and refusals.
 
 ## Pages
 
@@ -50,7 +50,7 @@ Approved or sent orders can be amended through the reviewed agent operation `sup
 | Purchase requests | `/supply-chain/purchase-requests` | status tabs, the five-line draft form, submit, approve or reject, cancel (each confirmed) and Create order |
 
 | Purchase orders | `/supply-chain/purchase-orders` | status tabs, the five-line draft form and the orders FlexTable |
-| Purchase order | `/supply-chain/purchase-orders/{id}` | current lines, totals, history, amendments and confirmed submit, approve, return, send, close and cancel |
+| Purchase order | `/supply-chain/purchase-orders/{id}` | current lines, totals, history, amendments, reviewed amendment form and confirmed submit, approve, return, send, close and cancel |
 
 Details are in
 [`purchasing/README.md`](purchasing/README.md#pages-and-menu).
