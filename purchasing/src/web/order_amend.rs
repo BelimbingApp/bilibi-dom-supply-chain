@@ -103,7 +103,8 @@ impl Editor {
                     if value.is_empty() {
                         Value::Null
                     } else {
-                        params_id(value).map_or_else(|| json!(value), |id| json!(id))
+                        params::positive_id(Some(value))
+                            .map_or_else(|| json!(value), |id| json!(id))
                     }
                 } else {
                     json!(value)
@@ -345,9 +346,6 @@ impl Editor {
             ..Modal::default()
         })
     }
-}
-fn params_id(value: &str) -> Option<i64> {
-    bilibi_ui::params::positive_id(Some(value))
 }
 fn display(value: &Value) -> String {
     match value {
