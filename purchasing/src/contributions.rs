@@ -181,7 +181,8 @@ bilibi_menu::contribute!(
         "supply_chain.purchase_requests",
         "Purchase requests",
         REQUESTS_PATH
-    ).company_scoped()
+    )
+    .company_scoped()
     .under("supply_chain")
     .requires(Requirement::Capability(VIEW))
     .order(10)
@@ -192,14 +193,16 @@ bilibi_menu::contribute!(
         "supply_chain.purchase_orders",
         "Purchase orders",
         "/supply-chain/purchase-orders"
-    ).company_scoped()
+    )
+    .company_scoped()
     .under("supply_chain")
     .requires(Requirement::Capability(VIEW))
     .order(20)
 );
 bilibi_menu::contribute!(
     "supply_chain/purchasing",
-    MenuItem::page("supply_chain.suppliers", "Suppliers", SUPPLIERS_PATH).company_scoped()
+    MenuItem::page("supply_chain.suppliers", "Suppliers", SUPPLIERS_PATH)
+        .company_scoped()
         .under("supply_chain")
         .requires(Requirement::Capability(VIEW))
         .order(30)

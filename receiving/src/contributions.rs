@@ -103,7 +103,8 @@ inventory::submit! {
 // The "supply_chain" root is Purchasing's, a declared dependency.
 bilibi_menu::contribute!(
     "supply_chain/receiving",
-    MenuItem::page("supply_chain.receipts", "Goods receipts", RECEIPTS_PATH).company_scoped()
+    MenuItem::page("supply_chain.receipts", "Goods receipts", RECEIPTS_PATH)
+        .company_scoped()
         .under("supply_chain")
         .requires(Requirement::Capability(VIEW))
         .order(25)

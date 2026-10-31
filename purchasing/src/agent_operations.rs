@@ -121,8 +121,11 @@ impl Purchasing {
             && !bilibi_company::reachable(
                 client,
                 scope,
-                company_id.try_into().map_err(|_| bilibi_database::Error::Invalid)?,
-            ).await?
+                company_id
+                    .try_into()
+                    .map_err(|_| bilibi_database::Error::Invalid)?,
+            )
+            .await?
         {
             return Err(bilibi_database::Error::Forbidden.into());
         }
